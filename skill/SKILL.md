@@ -8,6 +8,13 @@ description: Search swissdevjobs.ch and help the user apply to roles — handles
 Drives the `swissdevjobs-cli` tool to search, inspect, and apply to Swiss
 dev/IT jobs from swissdevjobs.ch.
 
+**Prefer the MCP server when it is connected.** `swissdevjobs-cli` also ships
+an MCP server exposing `search_jobs`, `get_job`, `apply_to_job`,
+`list_applications`, `mark_applied` and `top_technologies`. If those tools are
+available, use them — they return structured data directly and `apply_to_job`
+carries its own confirmation gate. Fall back to the CLI below when they are
+not. Register it with `claude mcp add swissdevjobs -- swissdevjobs-mcp`.
+
 ## Setup
 
 Install the CLI (`pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli`,
@@ -127,8 +134,12 @@ calls resume.
 
 ## Rules
 
-- **Never auto-submit** a browser application without explicit user
-  confirmation in chat for each submit click. Submitting is irreversible.
+- **Never auto-submit** an application — browser or native form — without
+  explicit user confirmation in chat for each submit. Submitting is
+  irreversible. Via MCP this is enforced: `apply_to_job` returns
+  `confirmation_required` with a `would_submit` block on the first call. Show
+  the user the role, the salary, and the letter, and only re-call with
+  `confirm: true` once they have agreed.
 - **Never** enter financial details, social-security or national ID numbers,
   passport numbers, or bank details into a form — defer to the user.
 - Match the CV language to the posting language.

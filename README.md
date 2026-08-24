@@ -7,7 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-skill%20included-8A63D2.svg)](skill/SKILL.md)
+[![MCP](https://img.shields.io/badge/MCP-server%20included-8A63D2.svg)](#mcp-server)
+[![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
 
 </div>
 
@@ -31,7 +32,8 @@ $ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
 
 - [Why](#why) · [Install](#install) · [Configure](#configure) · [Commands](#commands)
 - [How applying works](#how-applying-works) · [Filtering](#filtering)
-- [Under the hood](#under-the-hood) · [Cloudflare](#cloudflare) · [Claude Code skill](#claude-code-skill)
+- [MCP server](#mcp-server) · [Under the hood](#under-the-hood) · [Cloudflare](#cloudflare)
+- [Claude Code skill](#claude-code-skill) · [Development](#development)
 
 ---
 
@@ -42,7 +44,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
 | 💰 **Salary is a first-class filter** | `--min-salary 130000` — no more opening 40 tabs to find the range |
 | 📅 **Real posting dates** | The site re-stamps `activeFrom` when it bumps a listing. This decodes the true creation time from the MongoDB ObjectId, so a "new" job that's actually four months old can't fool you |
 | 🧠 **Remembers where you applied** | Local SQLite. Applied jobs vanish from `list` automatically |
-| 🤖 **Agent-native** | `--json` on every command; duplicates come back as *data*, not errors |
+| 🤖 **Agent-native** | An [MCP server](#mcp-server) plus `--json` on every command; duplicates come back as *data*, not errors |
 | 📦 **Zero dependencies** | Python stdlib only. No `requests`, no `pydantic`, no supply chain |
 | 🎯 **Refuses to black-hole your application** | Detects postings the site can't actually deliver and tells you where to apply instead |
 
@@ -339,6 +341,101 @@ origin-fresh data.
 
 ---
 
+## MCP server
+
+Point any [MCP](https://modelcontextprotocol.io) client at `swissdevjobs-mcp`
+and your assistant can search, read postings, and apply — with a confirmation
+gate in front of anything irreversible.
+
+```jsonc
+// Claude Code: .mcp.json  ·  Claude Desktop: claude_desktop_config.json
+{
+  "mcpServers": {
+    "swissdevjobs": {
+      "command": "swissdevjobs-mcp",
+      "env": {
+        "SDJ_NAME": "Your Name",
+        "SDJ_EMAIL": "you@example.com",
+        "SDJ_CV": "/absolute/path/to/cv.pdf"
+      }
+    }
+  }
+}
+```
+
+In Claude Code, one line does it:
+
+```sh
+claude mcp add swissdevjobs -- swissdevjobs-mcp
+```
+
+Then just ask: *"find me senior Python roles in Zurich over 140k and show me
+the top five."*
+
+### Tools
+
+| tool | what it does | read-only |
+|---|---|:--:|
+| `search_jobs` | filter by pay, stack, city, remote, seniority, visa | ✅ |
+| `get_job` | full posting: description, requirements, screening questions | ✅ |
+| `apply_to_job` | submit through the site's own form — **gated** | ❌ |
+| `list_applications` | everything recorded locally | ✅ |
+| `mark_applied` | record an application made by email or on an ATS | ❌ |
+| `top_technologies` | what the market is asking for right now | ✅ |
+
+The read-only tools carry `readOnlyHint`, so a client can run them without
+interrupting you. `search_jobs` returns compact rows on purpose — full
+descriptions come from `get_job`, so a broad search doesn't burn context.
+
+### The confirmation gate
+
+An application cannot be unsent, so `apply_to_job` refuses to submit until it
+is called a second time with `confirm: true`. The first call returns exactly
+what *would* go out:
+
+```jsonc
+{
+  "error": "confirmation_required",
+  "would_submit": {
+    "role": "Senior ML Engineer",
+    "company": "Acme AG",
+    "salary": "CHF 140'000–180'000",
+    "applicant": { "name": "…", "email": "…" },
+    "cv_path": "/…/cv.pdf",
+    "motivation_preview": "Dear hiring team, …",
+    "motivation_chars": 1180
+  }
+}
+```
+
+The assistant shows you that, you say yes, and only then does anything leave
+your machine. Duplicates and undeliverable postings are caught *before* the
+gate, so a repeat never turns into a second submission.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as you
+    participant M as assistant
+    participant S as MCP server
+    participant SDJ as swissdevjobs.ch
+
+    U->>M: "apply to the Acme role"
+    M->>S: apply_to_job(job_id, motivation, cv_path)
+    S->>S: already applied? deliverable? CV exists?
+    S-->>M: confirmation_required + would_submit
+    M-->>U: role, salary, letter preview — send it?
+    U->>M: yes
+    M->>S: apply_to_job(…, confirm: true)
+    S->>SDJ: POST /api/jobApply
+    SDJ-->>S: 200
+    S->>S: record it locally
+    S-->>M: submitted
+    M-->>U: applied, and hidden from future searches
+```
+
+---
+
 ## Under the hood
 
 ```mermaid
@@ -504,9 +601,25 @@ src/swissdevjobs_cli/
   db.py          SQLite job cache and application tracking
   dotenv.py      Stdlib .env loading with shell-wins precedence
   filter.py      Matching predicates and sort keys
+  payloads.py    Pure shaping shared by the CLI and MCP (never prints)
+  mcp.py         JSON-RPC 2.0 server over stdio
   cli.py         argparse commands and output formatting
 skill/SKILL.md   Claude Code skill wrapper
+tests/           63 offline tests — no network, sandboxed database
 ```
+
+---
+
+## Development
+
+```sh
+uv sync              # dependencies and dev tools, from the lockfile
+uv run pytest        # 63 tests, no network
+uv run ruff check .  # lint
+```
+
+CI runs the same three on Python 3.9 and 3.13, and starts the MCP server to
+verify it still completes a handshake.
 
 ---
 
