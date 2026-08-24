@@ -241,7 +241,7 @@ tells you which, and `direct-apply` refuses the cases it knows would vanish.
 
 ```mermaid
 flowchart TD
-    START(["sdj apply &lt;id&gt;"]) --> Q1{"redirectJobUrl points at<br/>talent.com or jometer?"}
+    START(["sdj apply JOB_ID"]) --> Q1{"redirectJobUrl points at<br/>talent.com or jometer?"}
 
     Q1 -->|yes| AGG["🚫 aggregator_posting<br/>exit code 2"]
     Q1 -->|no| Q2{"candidateContactWay?"}
@@ -257,7 +257,7 @@ flowchart TD
     OK -->|yes| MARK["💾 recorded in SQLite<br/>hidden from future list"]
     OK -->|no| ERR["❌ raised with the response body"]
 
-    BROWSER -.->|"after you submit"| COMPLETE["sdj apply &lt;id&gt; --complete browser"]
+    BROWSER -.->|"after you submit"| COMPLETE["sdj apply JOB_ID --complete browser"]
     COMPLETE --> MARK
 
     classDef start fill:#8A63D2,stroke:#5b3fa0,color:#ffffff
