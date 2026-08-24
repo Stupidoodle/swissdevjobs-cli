@@ -94,22 +94,29 @@ SDJ_CV="/absolute/path/to/cv.pdf"
 exported in your shell always wins, so nothing on disk can silently shadow it.
 
 ```mermaid
-flowchart LR
-    A["🔧 CLI flag<br/><code>--name --email --cv</code>"] --> R{{"resolved value"}}
-    B["🌍 real environment<br/><code>SDJ_NAME=… sdj …</code>"] --> R
-    C["📁 <code>$SDJ_ENV_FILE</code>"] --> R
-    D["📂 <code>./.env</code><br/><small>walking up to /</small>"] --> R
-    E["🏠 <code>~/.config/swissdevjobs-cli/.env</code>"] --> R
+flowchart TD
+    A["1 · Command-line flag<br/>--name / --email / --cv"]
+    B["2 · Real environment<br/>SDJ_NAME=… sdj …"]
+    C["3 · $SDJ_ENV_FILE"]
+    D["4 · ./.env<br/>walking up to /"]
+    E["5 · ~/.config/swissdevjobs-cli/.env"]
+    F["direct-apply refuses<br/>run: sdj config --init"]
+
+    A -->|"not set"| B
+    B -->|"not set"| C
+    C -->|"not set"| D
+    D -->|"not set"| E
+    E -->|"still not set"| F
 
     classDef win fill:#c7f0d8,stroke:#1a7f45,color:#0b3d22
     classDef mid fill:#dbe7ff,stroke:#2a5db0,color:#12233f
     classDef low fill:#f0f0f4,stroke:#8a8a99,color:#2a2a33
-    classDef out fill:#ffe9b8,stroke:#b07d1a,color:#4a3308
+    classDef bad fill:#ffd6d6,stroke:#c0392b,color:#4a1210
 
     class A win
     class B mid
     class C,D,E low
-    class R out
+    class F bad
 ```
 
 Highest priority at the top. A project-local `.env` beats the global one, which is
@@ -136,22 +143,22 @@ handy if you keep a separate identity per job search.
 
 ```mermaid
 flowchart TD
-    START(["sdj"]) --> DISCOVER["🔍 <b>Discover</b>"]
-    START --> ACT["✉️ <b>Act</b>"]
-    START --> TRACK["📊 <b>Track</b>"]
+    START(["sdj"]) --> DISCOVER["🔍 Discover"]
+    START --> ACT["✉️ Act"]
+    START --> TRACK["📊 Track"]
 
-    DISCOVER --> L["<code>list</code><br/>search &amp; filter the feed"]
-    DISCOVER --> S["<code>show</code><br/>full posting text"]
-    DISCOVER --> T["<code>tech</code><br/>most-wanted tech tags"]
-    DISCOVER --> O["<code>open</code><br/>posting in your browser"]
+    DISCOVER --> L["list<br/>search and filter the feed"]
+    DISCOVER --> S["show<br/>full posting text"]
+    DISCOVER --> T["tech<br/>most-wanted tech tags"]
+    DISCOVER --> O["open<br/>posting in your browser"]
 
-    ACT --> A["<code>apply</code><br/>how do I apply to this one?"]
-    ACT --> DA["<code>direct-apply</code><br/>submit through the site's form"]
-    ACT --> AU["<code>auth</code><br/>clear a Cloudflare challenge"]
+    ACT --> A["apply<br/>how do I apply to this one?"]
+    ACT --> DA["direct-apply<br/>submit through the site's form"]
+    ACT --> AU["auth<br/>clear a Cloudflare challenge"]
 
-    TRACK --> AP["<code>applications</code><br/>everything you've sent"]
-    TRACK --> ST["<code>stats</code><br/>cache &amp; application counts"]
-    TRACK --> CF["<code>config</code><br/>resolved settings &amp; paths"]
+    TRACK --> AP["applications<br/>everything you have sent"]
+    TRACK --> ST["stats<br/>cache and application counts"]
+    TRACK --> CF["config<br/>resolved settings and paths"]
 
     classDef root fill:#8A63D2,stroke:#5b3fa0,color:#ffffff
     classDef group fill:#dbe7ff,stroke:#2a5db0,color:#12233f
@@ -234,23 +241,23 @@ tells you which, and `direct-apply` refuses the cases it knows would vanish.
 
 ```mermaid
 flowchart TD
-    START(["<code>sdj apply &lt;id&gt;</code>"]) --> Q1{"redirectJobUrl points at<br/>talent.com or jometer?"}
+    START(["sdj apply &lt;id&gt;"]) --> Q1{"redirectJobUrl points at<br/>talent.com or jometer?"}
 
-    Q1 -->|yes| AGG["🚫 <b>aggregator_posting</b><br/>exit code 2"]
+    Q1 -->|yes| AGG["🚫 aggregator_posting<br/>exit code 2"]
     Q1 -->|no| Q2{"candidateContactWay?"}
 
-    Q2 -->|"<code>Email</code> +<br/>address present"| DIRECT["✅ <b>direct</b><br/>the site forwards it"]
-    Q2 -->|"<code>CompanyWebsite</code><br/>no address"| CW["🚫 <b>company_website_posting</b><br/>exit code 2"]
+    Q2 -->|"Email, with<br/>an address"| DIRECT["✅ direct<br/>the site forwards it"]
+    Q2 -->|"CompanyWebsite,<br/>no address"| CW["🚫 company_website_posting<br/>exit code 2"]
 
-    AGG --> BROWSER["🌐 <b>Go apply on the ATS</b><br/>Recruitee · Workday · Greenhouse<br/>Lever · Personio · SmartRecruiters"]
+    AGG --> BROWSER["🌐 Go apply on the ATS<br/>Recruitee · Workday · Greenhouse<br/>Lever · Personio · SmartRecruiters"]
     CW --> BROWSER
 
-    DIRECT --> POST["<code>POST /api/jobApply</code><br/>multipart: name, email,<br/>motivation, CV PDF"]
+    DIRECT --> POST["POST /api/jobApply<br/>multipart: name, email,<br/>motivation, CV PDF"]
     POST --> OK{"HTTP 200?"}
-    OK -->|yes| MARK["💾 recorded in SQLite<br/>hidden from future <code>list</code>"]
+    OK -->|yes| MARK["💾 recorded in SQLite<br/>hidden from future list"]
     OK -->|no| ERR["❌ raised with the response body"]
 
-    BROWSER -.->|"after you submit"| COMPLETE["<code>sdj apply &lt;id&gt; --complete browser</code>"]
+    BROWSER -.->|"after you submit"| COMPLETE["sdj apply &lt;id&gt; --complete browser"]
     COMPLETE --> MARK
 
     classDef start fill:#8A63D2,stroke:#5b3fa0,color:#ffffff
@@ -338,20 +345,20 @@ origin-fresh data.
 flowchart LR
     subgraph CLI["swissdevjobs_cli"]
         direction TB
-        C["<b>cli.py</b><br/>argparse commands"]
-        F["<b>filter.py</b><br/>matching &amp; sort keys"]
-        D["<b>db.py</b><br/>SQLite cache + tracking"]
-        A["<b>api.py</b><br/>HTTP, cookies, multipart"]
-        K["<b>captcha.py</b><br/>challenge handoff"]
-        E["<b>dotenv.py</b><br/><code>.env</code> loading"]
+        C["cli.py<br/>argparse commands"]
+        F["filter.py<br/>matching and sort keys"]
+        D["db.py<br/>SQLite cache + tracking"]
+        A["api.py<br/>HTTP, cookies, multipart"]
+        K["captcha.py<br/>challenge handoff"]
+        E["dotenv.py<br/>.env loading"]
     end
 
     C --> F
     C --> D
     C --> A
     A --> D
-    A -.->|"raises<br/>CaptchaRequired"| K
-    K -.->|"stores cookie,<br/>retries once"| A
+    A -.->|"raises CaptchaRequired"| K
+    K -.->|"stores cookie, retries once"| A
     E -.->|"at import"| A
     E -.->|"at import"| D
 
