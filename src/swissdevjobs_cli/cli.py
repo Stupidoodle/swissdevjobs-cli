@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import textwrap
 import webbrowser
@@ -13,23 +12,7 @@ from typing import Any
 from . import api, dotenv
 from .captcha import with_retry
 from .filter import matches, sort_key
-
-
-def _strip_html(s: str) -> str:
-    s = re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
-    s = re.sub(r"</p>", "\n\n", s, flags=re.I)
-    s = re.sub(r"<[^>]+>", "", s)
-    s = re.sub(r"\n{3,}", "\n\n", s)
-    return s.strip()
-
-
-def _fmt_salary(j: dict[str, Any]) -> str:
-    a, b = j.get("annualSalaryFrom"), j.get("annualSalaryTo")
-    if a and b:
-        return f"CHF {a:,}–{b:,}".replace(",", "'")
-    if a:
-        return f"CHF {a:,}+".replace(",", "'")
-    return "—"
+from .payloads import apply_payload, fmt_salary, strip_html, undeliverable
 
 
 def _print_row(j: dict[str, Any]) -> None:
@@ -51,7 +34,7 @@ def _print_row(j: dict[str, Any]) -> None:
         f"{(j.get('name') or '')[:48]:48}  "
         f"{(j.get('company') or '')[:25]:25}  "
         f"{(j.get('actualCity') or j.get('cityCategory') or '')[:12]:12}  "
-        f"{_fmt_salary(j):22}  "
+        f"{fmt_salary(j):22}  "
         f"{(j.get('workplace') or '')[:7]:7}  "
         f"{tags}"
     )
@@ -157,7 +140,7 @@ def cmd_show(args: argparse.Namespace) -> int:
           f"workplace={detail.get('workplace')}  visa={detail.get('hasVisaSponsorship')}")
     print(f"Level:      {detail.get('expLevel')}   Language: {detail.get('language')}   "
           f"Type: {detail.get('jobType')}")
-    print(f"Salary:     {_fmt_salary(detail)}")
+    print(f"Salary:     {fmt_salary(detail)}")
     print(f"Tech:       {', '.join(detail.get('technologies') or [])}")
     print(f"URL:        {api.job_url(detail.get('jobUrl', ''))}")
     print(f"Contact:    {detail.get('candidateContactWay')}  "
@@ -170,7 +153,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         val = detail.get(key)
         if val:
             print(f"## {label}")
-            print(textwrap.indent(_strip_html(val), "  "))
+            print(textwrap.indent(strip_html(val), "  "))
             print()
     return 0
 
@@ -209,22 +192,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         return 1
     d = with_retry(api.get_job, job["_id"])
 
-    contact = d.get("candidateContactWay")
-    email = d.get("emailAddressForApplications")
-    redirect = d.get("redirectJobUrl")
-    questions = d.get("applyQuestions") or []
     posting_url = api.job_url(d.get("jobUrl", ""))
-
-    # Determine fallback mode (used only if direct-apply fails)
-    fallback_mode = "unknown"
-    if contact == "Email" and email:
-        fallback_mode = "email"
-    elif (contact == "CompanyWebsite" and redirect) or redirect:
-        fallback_mode = "browser"
-    elif email:
-        fallback_mode = "email"
-
-    # Check if already applied
     existing = db.is_applied(d["_id"])
 
     # If --complete flag is set, mark as applied
@@ -252,43 +220,26 @@ def cmd_apply(args: argparse.Namespace) -> int:
         print(f"Marked as applied via {args.complete}")
         return 0
 
-    payload = {
-        # direct is always the preferred mode — POST /api/jobApply via sdj direct-apply
-        "mode": "direct",
-        "fallback_mode": fallback_mode,
-        "job_id": d["_id"],
-        "title": d.get("name"),
-        "company": d.get("company"),
-        "location": d.get("actualCity"),
-        "language": d.get("language"),
-        "posting_url": posting_url,
-        "apply_email": email,
-        "apply_url": redirect,
-        "questions": questions,
-        "salary": _fmt_salary(d),
-        "must_have": _strip_html(d.get("requirementsMustTextArea") or ""),
-        "nice_have": _strip_html(d.get("requirementsNiceTextArea") or ""),
-        "responsibilities": _strip_html(d.get("responsibilitiesTextArea") or ""),
-        "description": _strip_html(d.get("description") or ""),
-        "technologies": d.get("technologies") or [],
-        # Agent-first: include applied status
-        "applied": existing,
-    }
+    payload = apply_payload(d, posting_url=posting_url, applied=existing)
+    email = payload["apply_email"]
+    redirect = payload["apply_url"]
+    fallback = payload["fallback_mode"]
+    questions = payload["questions"]
 
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
-    print(f"Apply mode: DIRECT  (fallback: {fallback_mode.upper()})")
+    print(f"Apply mode: DIRECT  (fallback: {fallback.upper()})")
     if existing:
         print(f"STATUS:     Already applied on {existing['applied_at']} via {existing['method']}")
     print(f"Posting:    {posting_url}")
     print(f"Role:       {payload['title']} @ {payload['company']} ({payload['location']})")
     print(f"Salary:     {payload['salary']}   Language: {payload['language']}")
     print(f"Workflow:   sdj direct-apply {d['_id']} --cv <cv.pdf> --motivation <text|path>")
-    if fallback_mode == "email":
+    if fallback == "email":
         print(f"Fallback:   email to {email}")
-    elif fallback_mode == "browser":
+    elif fallback == "browser":
         print(f"Fallback:   ATS at {redirect}")
         if args.open:
             webbrowser.open(redirect, new=2)
@@ -429,42 +380,15 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     #      company's own ATS (umantis, Personio, applytojob, etc.); there is no
     #      native form delivery. emailAddressForApplications is null for these.
     # In both cases refuse and route the agent to chrome MCP on redirectJobUrl.
-    AGGREGATOR_HOSTS = ("talent.com", "tnl2.jometer.com", "jometer.com")
-    redirect_raw = d.get("redirectJobUrl") or ""
-    redirect_lc = redirect_raw.lower()
-    contact_way = d.get("candidateContactWay")
-    company_email = d.get("emailAddressForApplications")
-    matched_host = next((h for h in AGGREGATOR_HOSTS if h in redirect_lc), None)
-    is_aggregator = matched_host is not None
-    is_company_website = contact_way == "CompanyWebsite" and not company_email
-    is_external = is_aggregator or is_company_website
-    if is_external and not args.force:
-        reason = "aggregator_posting" if is_aggregator else "company_website_posting"
-        if is_aggregator:
-            why = f"the posting is syndicated via {matched_host}"
-        else:
-            why = "the posting links out to the company's own ATS (no native form delivery)"
+    refusal = undeliverable(d)
+    if refusal and not args.force:
         if args.json:
-            print(json.dumps({
-                "error": reason,
-                "next_action": "use_chrome_mcp",
-                "apply_url": redirect_raw,
-                "aggregator_host": matched_host,
-                "contact_way": contact_way,
-                "company": d.get("company"),
-                "role": d.get("name"),
-                "message": (
-                    f"USE CHROME MCP: visit {redirect_raw} and drive the ATS form. "
-                    f"SwissDevJobs would silently black-hole this submission because "
-                    f"{why}. Override with --force if you really mean it."
-                ),
-            }, indent=2))
+            print(json.dumps(refusal, indent=2))
         else:
             print(
                 f"USE CHROME MCP — visit this URL and drive the apply form:\n"
-                f"  {redirect_raw or '(no redirect URL on posting)'}\n"
-                f"(SwissDevJobs would silently black-hole this submission because "
-                f"{why}. Override with --force.)",
+                f"  {refusal['apply_url'] or '(no redirect URL on posting)'}\n"
+                f"({refusal['message']})",
                 file=sys.stderr,
             )
         return 2
@@ -486,7 +410,7 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     if not args.json:
         print("Submitting direct application to SwissDevJobs...")
         print(f"  Role:    {d.get('name')} @ {d.get('company')} ({d.get('actualCity')})")
-        print(f"  Salary:  {_fmt_salary(d)}")
+        print(f"  Salary:  {fmt_salary(d)}")
         print(f"  CV:      {args.cv}")
         print(f"  Name:    {args.name}")
         print(f"  Email:   {args.email}")
