@@ -32,6 +32,7 @@ Issues = "https://github.com/Stupidoodle/swissdevjobs-cli/issues"
 [project.scripts]
 swissdevjobs = "swissdevjobs_cli.cli:main"
 sdj = "swissdevjobs_cli.cli:main"
+swissdevjobs-mcp = "swissdevjobs_cli.mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
