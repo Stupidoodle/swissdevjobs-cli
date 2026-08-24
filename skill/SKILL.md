@@ -11,15 +11,23 @@ dev/IT jobs from swissdevjobs.ch.
 ## Setup
 
 Install the CLI (`pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli`,
-or `pip install -e .` from a checkout), then set the applicant identity once:
+or `pip install -e .` from a checkout), then store the applicant identity once:
 
 ```sh
-export SDJ_NAME="Your Name"
-export SDJ_EMAIL="you@example.com"
+sdj config --init      # writes ~/.config/swissdevjobs-cli/.env
+sdj config             # verify what resolved, and from which file
 ```
 
-Without those, `sdj direct-apply` refuses to run unless `--name` / `--email`
-are passed explicitly.
+```dotenv
+SDJ_NAME="Your Name"
+SDJ_EMAIL="you@example.com"
+SDJ_CV="/absolute/path/to/cv.pdf"
+```
+
+`.env` is read from `$SDJ_ENV_FILE`, then `./.env` (walking up), then the config
+directory. Real environment variables and explicit `--name` / `--email` / `--cv`
+flags both win over the file. Without an identity from *some* source,
+`sdj direct-apply` refuses to run — run `sdj config` to see what it found.
 
 ## Tooling
 
@@ -32,10 +40,11 @@ sdj list --tech Python --remote --min-salary 130000 --json
 sdj show <id|slug> --json
 sdj apply <id|slug> --json                    # surface the apply mechanism
 sdj apply <id|slug> --json --complete email   # mark as applied via email
-sdj direct-apply <id|slug> --cv /path/to/cv.pdf \
-    --motivation "text or /path/to/letter.txt"
+sdj direct-apply <id|slug> --motivation "text or /path/to/letter.txt"
+sdj direct-apply <id|slug> --cv /path/to/cv_de.pdf --motivation ...  # override CV
 sdj applications --json                       # list tracked applications
 sdj stats                                     # cache + application counts
+sdj config                                    # resolved identity + paths
 sdj auth                                      # clear a Cloudflare challenge
 ```
 
@@ -60,8 +69,11 @@ Agent-friendly behaviour:
 ### mode == "direct"
 
 ```sh
-sdj direct-apply <id> --cv /path/to/cv.pdf --motivation /path/to/letter.txt
+sdj direct-apply <id> --motivation /path/to/letter.txt
 ```
+
+`--cv` defaults to `$SDJ_CV`. Pass it explicitly when the posting's language
+calls for a different CV than the default.
 
 Submits through the site's own apply form (`POST /api/jobApply`, multipart).
 `--motivation` takes either inline text or a path to a `.txt` file. The

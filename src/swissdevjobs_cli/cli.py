@@ -10,7 +10,7 @@ import textwrap
 import webbrowser
 from typing import Any
 
-from . import api
+from . import api, dotenv
 from .captcha import with_retry
 from .filter import matches, sort_key
 
@@ -384,12 +384,23 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     """
     from . import db
 
-    if not args.name or not args.email:
+    missing = [
+        flag
+        for flag, value in (("--name/$SDJ_NAME", args.name),
+                            ("--email/$SDJ_EMAIL", args.email),
+                            ("--cv/$SDJ_CV", args.cv))
+        if not value
+    ]
+    if missing:
         print(
-            "Error: applicant identity is required. Pass --name/--email, or set\n"
-            "       the SDJ_NAME and SDJ_EMAIL environment variables.",
+            f"Error: missing {', '.join(missing)}.\n"
+            f"       Run `sdj config --init` to create {dotenv.config_dir() / '.env'},\n"
+            f"       then fill in your details there.",
             file=sys.stderr,
         )
+        return 1
+    if not os.path.isfile(args.cv):
+        print(f"Error: CV not found: {args.cv}", file=sys.stderr)
         return 1
 
     jobs = with_retry(api.list_jobs)
@@ -516,6 +527,55 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    """Show the resolved configuration, or scaffold a .env file."""
+    from . import db
+
+    if args.init:
+        try:
+            path = dotenv.write_template()
+        except FileExistsError as e:
+            print(f"{e.args[0]} already exists — edit it directly.", file=sys.stderr)
+            return 1
+        print(f"Wrote {path}")
+        print("Fill in SDJ_NAME and SDJ_EMAIL, then run `sdj config` to verify.")
+        return 0
+
+    resolved = {
+        "name": os.environ.get("SDJ_NAME"),
+        "email": os.environ.get("SDJ_EMAIL"),
+        "cv": os.environ.get("SDJ_CV"),
+        "cache_dir": str(api.CACHE_DIR),
+        "config_dir": str(api.CONFIG_DIR),
+        "cookie_file": str(api.COOKIE_FILE),
+        "database": str(db.DB_PATH),
+        "env_files_loaded": dotenv.LOADED,
+    }
+
+    if args.json:
+        print(json.dumps(resolved, indent=2))
+        return 0
+
+    print("Applicant identity")
+    print(f"  SDJ_NAME     {resolved['name'] or '(unset)'}")
+    print(f"  SDJ_EMAIL    {resolved['email'] or '(unset)'}")
+    print(f"  SDJ_CV       {resolved['cv'] or '(unset)'}")
+    print()
+    print("Paths")
+    print(f"  cache dir    {resolved['cache_dir']}")
+    print(f"  config dir   {resolved['config_dir']}")
+    print(f"  cookie jar   {resolved['cookie_file']}")
+    print(f"  database     {resolved['database']}")
+    print()
+    if resolved["env_files_loaded"]:
+        print(".env files loaded")
+        for path in resolved["env_files_loaded"]:
+            print(f"  {path}")
+    else:
+        print("No .env file found. Run `sdj config --init` to create one.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="swissdevjobs",
@@ -591,7 +651,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Applicant full name (default: $SDJ_NAME)")
     da.add_argument("--email", default=os.environ.get("SDJ_EMAIL"),
                     help="Applicant email address (default: $SDJ_EMAIL)")
-    da.add_argument("--cv", required=True, help="Path to PDF CV file")
+    da.add_argument("--cv", default=os.environ.get("SDJ_CV"),
+                    help="Path to a PDF CV (default: $SDJ_CV)")
     da.add_argument("--motivation", default="", help="Cover letter text or path to a .txt file")
     da.add_argument("--not-eu", action="store_true", help="Set isFromEurope=No (default: Yes)")
     da.add_argument(
@@ -610,6 +671,12 @@ def build_parser() -> argparse.ArgumentParser:
     apps.add_argument("--limit", type=int, default=100)
     apps.add_argument("--json", action="store_true")
     apps.set_defaults(func=cmd_applications)
+
+    cf = sub.add_parser("config", help="Show resolved config / create a .env")
+    cf.add_argument("--init", action="store_true",
+                    help="write a starter .env to the config directory")
+    cf.add_argument("--json", action="store_true")
+    cf.set_defaults(func=cmd_config)
 
     # stats command
     st = sub.add_parser("stats", help="Show database statistics")
