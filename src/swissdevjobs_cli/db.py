@@ -173,6 +173,10 @@ def _auto_migrate_markdown_log() -> int:
 def import_markdown_log(path: Path) -> int:
     """Parse and import applications-log.md into database."""
     conn = get_db()
+    # This is a public entry point as well as a migration step. _ensure_db()
+    # can't be used here — it calls this function, so it would recurse — but
+    # the schema is idempotent, so creating it directly is safe either way.
+    conn.executescript(SCHEMA)
     imported = 0
 
     try:

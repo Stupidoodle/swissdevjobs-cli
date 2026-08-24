@@ -90,3 +90,18 @@ def test_job_detail_is_cached_and_expires(fresh_db):
     fresh_db.upsert_job_detail(job()["_id"], {"_id": job()["_id"], "description": "hi"})
     assert fresh_db.get_cached_detail(job()["_id"])["description"] == "hi"
     assert fresh_db.get_cached_detail(job()["_id"], max_age_seconds=0) is None
+
+
+def test_markdown_log_import_skips_blocked_rows(fresh_db, tmp_path):
+    log = tmp_path / "applications-log.md"
+    log.write_text(
+        "| # | Company | Role | URL | Method | Status | Escalated | Timestamp |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| 1 | Acme AG | Dev | https://swissdevjobs.ch/jobs/x (id: abc123) "
+        "| email | submitted | no | 2026-08-01 |\n"
+        "| 2 | Blocked AG | Dev | url | email | blocked | yes | 2026-08-02 |\n"
+    )
+    assert fresh_db.import_markdown_log(log) == 1
+    apps = fresh_db.list_applications()
+    assert [a["company"] for a in apps] == ["Acme AG"]
+    assert apps[0]["job_id"] == "abc123"
