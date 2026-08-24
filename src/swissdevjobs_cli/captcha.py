@@ -10,6 +10,7 @@ Netscape-format jar in api.COOKIE_FILE so subsequent requests carry it.
 """
 from __future__ import annotations
 
+import contextlib
 import sys
 import time
 import webbrowser
@@ -21,10 +22,8 @@ from . import api
 def _store_clearance(value: str, domain: str = ".swissdevjobs.ch") -> None:
     jar = MozillaCookieJar(str(api.COOKIE_FILE))
     if api.COOKIE_FILE.exists():
-        try:
+        with contextlib.suppress(Exception):
             jar.load(ignore_discard=True, ignore_expires=True)
-        except Exception:
-            pass
     jar.set_cookie(
         Cookie(
             version=0,
@@ -64,10 +63,8 @@ def interactive_unblock(challenge_url: str) -> bool:
         "Press Enter with empty input to abort.",
         file=sys.stderr,
     )
-    try:
+    with contextlib.suppress(Exception):
         webbrowser.open(challenge_url, new=2)
-    except Exception:
-        pass
     try:
         value = input("cf_clearance cookie value: ").strip()
     except (EOFError, KeyboardInterrupt):

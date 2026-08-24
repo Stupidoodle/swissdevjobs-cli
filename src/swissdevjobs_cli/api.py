@@ -12,8 +12,8 @@ We detect those responses and surface them to the captcha handler.
 """
 from __future__ import annotations
 
+import contextlib
 import gzip
-import io
 import json
 import os
 import time
@@ -50,10 +50,8 @@ class CaptchaRequired(Exception):
 def _jar() -> MozillaCookieJar:
     jar = MozillaCookieJar(str(COOKIE_FILE))
     if COOKIE_FILE.exists():
-        try:
+        with contextlib.suppress(Exception):
             jar.load(ignore_discard=True, ignore_expires=True)
-        except Exception:
-            pass
     return jar
 
 
@@ -100,10 +98,8 @@ def _get(path: str, *, accept_json: bool = True, timeout: int = 20) -> bytes:
         raw = e.read() or b""
 
     if headers.get("content-encoding") == "gzip":
-        try:
+        with contextlib.suppress(Exception):
             raw = gzip.decompress(raw)
-        except Exception:
-            pass
 
     jar.save(ignore_discard=True, ignore_expires=True)
 

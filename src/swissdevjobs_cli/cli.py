@@ -219,9 +219,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     fallback_mode = "unknown"
     if contact == "Email" and email:
         fallback_mode = "email"
-    elif contact == "CompanyWebsite" and redirect:
-        fallback_mode = "browser"
-    elif redirect:
+    elif (contact == "CompanyWebsite" and redirect) or redirect:
         fallback_mode = "browser"
     elif email:
         fallback_mode = "email"
@@ -474,7 +472,8 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     motivation = args.motivation.strip()
     # If it looks like a file path and the file exists, read it
     if motivation and os.path.exists(motivation):
-        motivation = open(motivation).read().strip()
+        with open(motivation, encoding="utf-8") as fh:
+            motivation = fh.read().strip()
     if not motivation:
         print("Error: --motivation TEXT_OR_PATH is required", file=sys.stderr)
         return 1
@@ -485,7 +484,7 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
         return 1
 
     if not args.json:
-        print(f"Submitting direct application to SwissDevJobs...")
+        print("Submitting direct application to SwissDevJobs...")
         print(f"  Role:    {d.get('name')} @ {d.get('company')} ({d.get('actualCity')})")
         print(f"  Salary:  {_fmt_salary(d)}")
         print(f"  CV:      {args.cv}")

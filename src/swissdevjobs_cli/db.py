@@ -7,11 +7,11 @@ Agent-first design:
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import sqlite3
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -129,7 +129,6 @@ def _ensure_db() -> None:
 
 def _auto_migrate_json_cache() -> int:
     """Import existing JSON cache files into SQLite."""
-    conn = get_db()
     imported = 0
 
     # Import jobsLight.json
@@ -224,10 +223,8 @@ def import_markdown_log(path: Path) -> int:
             # Parse timestamp
             applied_at = None
             if timestamp:
-                try:
+                with contextlib.suppress(Exception):
                     applied_at = datetime.strptime(timestamp.strip(), "%Y-%m-%d").isoformat()
-                except Exception:
-                    pass
 
             # Insert (skip duplicates - check by company+role if no job_id)
             try:
@@ -374,7 +371,8 @@ def _row_to_job_dict(row: sqlite3.Row) -> dict[str, Any]:
         "candidateContactWay": row["candidate_contact_way"],
         "emailAddressForApplications": row["email_address"],
         "redirectJobUrl": row["redirect_url"],
-        "activeFrom": (row["active_from"] if "active_from" in row.keys() else None),
+        # `in row` would search sqlite3.Row *values*; .keys() is required here.
+        "activeFrom": (row["active_from"] if "active_from" in row.keys() else None),  # noqa: SIM118
         "postedAt": posted_at_iso,
         "postedAtUnix": posted_at_unix,
     }

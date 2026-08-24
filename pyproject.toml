@@ -35,3 +35,31 @@ sdj = "swissdevjobs_cli.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",    # long lines are handled by the formatter, not the linter
+    "UP006",   # PEP 585 generics need 3.9+ at runtime; we rely on __future__ annotations
+    "UP007",   # same, for X | Y
+    "UP045",   # same, for X | None
+    "RUF001",  # en dashes in salary ranges and prose are deliberate
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

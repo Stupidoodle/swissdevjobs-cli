@@ -1,7 +1,8 @@
 """Job filtering and ranking helpers."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 def _lower_set(xs: Iterable[str]) -> set[str]:
@@ -46,22 +47,19 @@ def matches(
     if visa is True and job.get("hasVisaSponsorship") != "Yes":
         return False
 
-    if level:
-        if job.get("expLevel", "").lower() != level.lower():
-            return False
+    if level and job.get("expLevel", "").lower() != level.lower():
+        return False
 
-    if language:
-        if job.get("language", "").lower() != language.lower():
-            return False
+    if language and job.get("language", "").lower() != language.lower():
+        return False
 
     if min_salary is not None and (job.get("annualSalaryTo") or 0) < min_salary:
         return False
     if max_salary is not None and (job.get("annualSalaryFrom") or 10**9) > max_salary:
         return False
 
-    if company:
-        if company.lower() not in (job.get("company", "") or "").lower():
-            return False
+    if company and company.lower() not in (job.get("company", "") or "").lower():
+        return False
 
     if query:
         q = query.lower()
