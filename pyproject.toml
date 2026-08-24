@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swissdevjobs-cli"
+version = "0.1.0"
+description = "CLI for swissdevjobs.ch — list, search, and inspect Swiss dev jobs with salary info"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Bryan Tran" }]
+license = { file = "LICENSE" }
+keywords = ["jobs", "switzerland", "cli", "job-search"]
+classifiers = [
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Stupidoodle/swissdevjobs-cli"
+Issues = "https://github.com/Stupidoodle/swissdevjobs-cli/issues"
+
+[project.scripts]
+swissdevjobs = "swissdevjobs_cli.cli:main"
+sdj = "swissdevjobs_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
