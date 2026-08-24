@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the ceiling of the supported range.
+        python-version: ["3.9", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --locked --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Verify the MCP server completes a handshake
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | uv run swissdevjobs-mcp > handshake.json
+          python -c "
+          import json, sys
+          lines = [json.loads(l) for l in open('handshake.json') if l.strip()]
+          by_id = {m['id']: m for m in lines}
+          assert by_id[1]['result']['serverInfo']['name'] == 'swissdevjobs'
+          names = {t['name'] for t in by_id[2]['result']['tools']}
+          assert 'search_jobs' in names and 'apply_to_job' in names, names
+          print(f'handshake ok, {len(names)} tools')
+          "
