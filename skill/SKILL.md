@@ -10,8 +10,8 @@ dev/IT jobs from swissdevjobs.ch.
 
 ## Setup
 
-Install the CLI (`pipx install swissdevjobs-cli`, or `pip install -e .` from a
-checkout), then set the applicant identity once:
+Install the CLI (`pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli`,
+or `pip install -e .` from a checkout), then set the applicant identity once:
 
 ```sh
 export SDJ_NAME="Your Name"

@@ -10,9 +10,15 @@ Not affiliated with swissdevjobs.ch.
 ## Install
 
 ```sh
+pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli
+
+# or, from a checkout:
 pipx install -e .          # or: pip install -e .
+
 # installs two equivalent binaries: `swissdevjobs` and `sdj`
 ```
+
+Not on PyPI.
 
 Python 3.9+.
 
