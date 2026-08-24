@@ -10,7 +10,6 @@ build/
 .cache/
 .pytest_cache/
 *.db
-uv.lock
 
 # Editors / OS
 .idea/

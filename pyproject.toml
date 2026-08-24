@@ -19,6 +19,12 @@ classifiers = [
 ]
 dependencies = []
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.6",
+]
+
 [project.urls]
 Homepage = "https://github.com/Stupidoodle/swissdevjobs-cli"
 Issues = "https://github.com/Stupidoodle/swissdevjobs-cli/issues"
