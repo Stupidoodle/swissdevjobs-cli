@@ -47,7 +47,8 @@ src = ["src", "tests"]
 select = ["E", "F", "C", "D", "B", "I", "Q", "UP", "ASYNC", "TID", "S"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S108", "D101", "D102", "D103", "D104", "D105", "D107"]
+# S608: test fixtures build tables from literal dicts, not user input.
+"tests/**" = ["S101", "S108", "S608", "D101", "D102", "D103", "D104", "D105", "D107"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -60,6 +61,7 @@ known-first-party = ["swissdevjobs_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = "-q"
 markers = [
     "integration: touches a real SQLite file outside the sandbox fixtures",
@@ -74,8 +76,14 @@ filterwarnings = [
 [tool.coverage.run]
 branch = true
 source = ["src/swissdevjobs_cli"]
+omit = [
+    # Two lines of `python -m` glue; exercised only as a subprocess,
+    # where coverage cannot see it.
+    "src/swissdevjobs_cli/__main__.py",
+]
 
 [tool.coverage.report]
+fail_under = 90
 show_missing = true
 exclude_also = [
     "if TYPE_CHECKING:",

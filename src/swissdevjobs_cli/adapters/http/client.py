@@ -141,6 +141,7 @@ class HttpClient:
                 k.lower(): v for k, v in (e.headers.items() if e.headers else [])
             }
             raw = e.read() or b""
+            e.close()
 
         if headers.get("content-encoding") == "gzip":
             with contextlib.suppress(Exception):
@@ -190,6 +191,7 @@ class HttpClient:
         except urllib.error.HTTPError as e:
             status = e.code
             raw = e.read() or b""
+            e.close()
 
         jar.save(ignore_discard=True, ignore_expires=True)
 

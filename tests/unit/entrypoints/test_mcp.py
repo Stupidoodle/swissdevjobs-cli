@@ -6,42 +6,18 @@ import json
 
 import pytest
 
-from conftest import CH, job
-from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
+from conftest import job
+from fakes.fake_board_port import FakeBoard
 from swissdevjobs_cli.adapters.http.client import CaptchaRequired
 from swissdevjobs_cli.bootstrap import Runtime
 from swissdevjobs_cli.entrypoints import mcp
 
 
-class FakeBoard:
-    """Hand-written BoardPort fake: canned feed, canned detail, recorded sends."""
-
-    def __init__(self, feed=None, detail_wire=None):
-        self.board = CH
-        self._feed_wire = feed if feed is not None else [job()]
-        self._detail_wire = detail_wire if detail_wire is not None else job()
-        self.sent = []
-        self.raises = None
-
-    def fetch_jobs(self, *, force=False):
-        if self.raises:
-            raise self.raises
-        return acl.jobs_from_wire(self._feed_wire, self.board)
-
-    def fetch_detail(self, job_id):
-        return acl.detail_from_wire(self._detail_wire, self.board)
-
-    def submit_application(self, detail, applicant, motivation):
-        self.sent.append(
-            {"name": applicant.name, "email": applicant.email, "motivation": motivation}
-        )
-        return {"status": 200, "response": "ok"}
-
-
 @pytest.fixture
 def board():
     return FakeBoard(
-        detail_wire=job(description="<p>Build things</p>", applyQuestions=[])
+        feed=[job()],
+        detail_wire=job(description="<p>Build things</p>", applyQuestions=[]),
     )
 
 
@@ -257,11 +233,12 @@ def test_a_duplicate_is_reported_before_the_gate(runtime, board, fresh_uow, tmp_
 
 def test_an_undeliverable_posting_is_refused_even_with_confirm(fresh_uow, tmp_path):
     board = FakeBoard(
+        feed=[job()],
         detail_wire=job(
             candidateContactWay="CompanyWebsite",
             emailAddressForApplications=None,
             redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
-        )
+        ),
     )
     runtime = Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
     cv = tmp_path / "cv.pdf"
@@ -320,3 +297,126 @@ def test_missing_identity_is_reported(runtime, board, tmp_path, monkeypatch):
     )
     assert result["error"] == "missing_identity"
     assert board.sent == []
+
+
+# --- the stdio loop ---------------------------------------------------------
+
+
+def test_serve_answers_line_delimited_json(capsys):
+    import io
+
+    stdin = io.StringIO(
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+        "\n"
+        "not json\n"
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+        '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
+        '{"jsonrpc":"2.0","id":3,"method":"ping"}\n'
+    )
+    out = io.StringIO()
+    assert mcp.serve(stdin=stdin, stdout=out) == 0
+    lines = [json.loads(line) for line in out.getvalue().splitlines()]
+    by_id = {m.get("id"): m for m in lines}
+    assert by_id[1]["result"]["serverInfo"]["name"] == "swissdevjobs"
+    assert {t["name"] for t in by_id[2]["result"]["tools"]} == set(mcp.HANDLERS)
+    assert by_id[None]["error"]["code"] == -32700
+    assert by_id[3]["result"] == {}
+
+
+def test_search_can_target_one_country(runtime):
+    assert call(runtime, "search_jobs", country="ch")["total_matching"] == 1
+
+
+def test_search_rejects_an_unknown_country(runtime):
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "search_jobs", "arguments": {"country": "atlantis"}},
+        },
+        runtime,
+    )
+    assert response["result"]["isError"] is True
+
+
+def test_the_preview_names_the_board(runtime, tmp_path):
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    result = call(
+        runtime,
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+    )
+    assert result["would_submit"]["board"] == "SwissDevJobs (ch)"
+
+
+def test_non_default_language_skills_reach_the_board(runtime, board, tmp_path):
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    result = call(
+        runtime,
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+        lang_skills="fluent",
+        is_from_europe=False,
+        confirm=True,
+    )
+    assert result["submitted"] is True
+
+
+def test_force_overrides_a_duplicate(runtime, board, fresh_uow, tmp_path):
+    fresh_uow.applications.upsert(
+        job_id=job()["_id"], company="Acme AG", role="X", method="direct"
+    )
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    result = call(
+        runtime,
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+        confirm=True,
+        force=True,
+    )
+    assert result["submitted"] is True
+    assert len(board.sent) == 1
+
+
+def test_mark_applied_records_via_the_jobs_board(runtime, fresh_uow):
+    result = call(runtime, "mark_applied", job_id="acme", method="linkedin")
+    assert result["method"] == "linkedin"
+    assert result["source"] == "swissdevjobs"
+    assert fresh_uow.applications.get_by_job_id(job()["_id"]) is not None
+
+
+def test_list_applications_returns_the_ledger(runtime, fresh_uow):
+    fresh_uow.applications.upsert(
+        job_id="abc", company="Acme", role="Dev", method="email"
+    )
+    result = call(runtime, "list_applications")
+    assert result["count"] == 1
+    assert result["applications"][0]["company"] == "Acme"
+
+
+def test_top_technologies_counts_tags(runtime):
+    result = call(runtime, "top_technologies", limit=2)
+    names = {t["name"] for t in result["technologies"]}
+    assert "Python" in names
+
+
+def test_resources_and_prompts_are_empty_but_answered():
+    for method in ("resources/list", "prompts/list"):
+        response = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": method})
+        assert response["result"] == {"resources": [], "prompts": []}
