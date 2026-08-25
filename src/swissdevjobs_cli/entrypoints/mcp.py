@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from swissdevjobs_cli import bootstrap
+from swissdevjobs_cli.adapters.boards.registry import BOARDS
 from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
 from swissdevjobs_cli.adapters.http.client import CaptchaRequired
 from swissdevjobs_cli.domain.model.job import Job
@@ -44,10 +45,22 @@ def _log(message: str) -> None:
 # --- tool implementations ---------------------------------------------------
 
 
-def _summarize(runtime: bootstrap.Runtime, job: Job) -> dict[str, Any]:
+def _summarize(job: Job) -> dict[str, Any]:
     """A compact row. Full descriptions come from get_job, to save context."""
-    url = acl.posting_url(runtime.board_config, job.raw.get("jobUrl", ""))
+    url = acl.posting_url(job.board, job.raw.get("jobUrl", ""))
     return JobSummaryDTO.from_domain(job, url).as_dict()
+
+
+def _boards_for(runtime: bootstrap.Runtime, country: str) -> list:
+    """Board clients for one country code, or every enabled board for "all"."""
+    if country and country != "all":
+        code = country.strip().lower()
+        if code not in runtime.boards:
+            raise ValueError(
+                f"Unknown country {country!r}; known: {', '.join(sorted(BOARDS))}"
+            )
+        return [runtime.boards[code]]
+    return runtime.enabled_boards()
 
 
 def tool_search_jobs(
@@ -66,10 +79,11 @@ def tool_search_jobs(
     sort: str = "posted",
     limit: int = 25,
     include_applied: bool = False,
+    country: str = "all",
 ) -> dict[str, Any]:
     """Compact search over the feed with every filter the CLI has."""
-    uow, board = runtime.uow, runtime.board
-    jobs = search.list_jobs(uow, board)
+    uow = runtime.uow
+    jobs = search.list_jobs(uow, _boards_for(runtime, country))
     hits = [
         j
         for j in jobs
@@ -103,21 +117,21 @@ def tool_search_jobs(
         "total_matching": total,
         "hidden_already_applied": hidden,
         "returned": min(limit, total),
-        "jobs": [_summarize(runtime, j) for j in hits[:limit]],
+        "jobs": [_summarize(j) for j in hits[:limit]],
     }
 
 
 def tool_get_job(runtime: bootstrap.Runtime, job_id: str) -> dict[str, Any]:
     """The full posting as an apply-ready payload."""
-    uow, board = runtime.uow, runtime.board
-    jobs = search.list_jobs(uow, board)
+    uow = runtime.uow
+    jobs = search.list_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
-    detail = search.get_detail(uow, board, str(job.id))
+    detail = search.get_detail(uow, runtime.board_for(job), str(job.id))
     return JobDetailDTO.from_domain(
         detail,
-        posting_url=acl.posting_url(runtime.board_config, detail.raw.get("jobUrl", "")),
+        posting_url=acl.posting_url(detail.board, detail.raw.get("jobUrl", "")),
         applied=as_dict_or_none(tracking.existing_application(uow, str(detail.id))),
     ).as_dict()
 
@@ -135,12 +149,13 @@ def tool_apply_to_job(
     force: bool = False,
 ) -> dict[str, Any]:
     """The irreversible one: native submission behind the confirm gate."""
-    uow, board = runtime.uow, runtime.board
-    jobs = search.list_jobs(uow, board)
+    uow = runtime.uow
+    jobs = search.list_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
 
+    board = runtime.board_for(job)
     detail = search.get_detail(uow, board, str(job.id))
     existing = tracking.existing_application(uow, str(detail.id))
     if existing and not force:
@@ -216,12 +231,12 @@ def tool_mark_applied(
     notes: str | None = None,
 ) -> dict[str, Any]:
     """Record an application submitted outside this tool."""
-    uow, board = runtime.uow, runtime.board
-    jobs = search.list_jobs(uow, board)
+    uow = runtime.uow
+    jobs = search.list_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
-    detail = search.get_detail(uow, board, str(job.id))
+    detail = search.get_detail(uow, runtime.board_for(job), str(job.id))
     return tracking.mark_applied(
         uow,
         job_id=str(detail.id),
@@ -229,6 +244,7 @@ def tool_mark_applied(
         role=detail.title,
         method=method,
         notes=notes,
+        source=detail.board.source,
     ).as_dict()
 
 
@@ -236,7 +252,7 @@ def tool_top_technologies(
     runtime: bootstrap.Runtime, limit: int = 25
 ) -> dict[str, Any]:
     """Tag frequency across the current feed."""
-    jobs = search.list_jobs(runtime.uow, runtime.board)
+    jobs = search.list_jobs(runtime.uow, runtime.enabled_boards())
     return {
         "technologies": [
             {"name": n, "postings": c} for n, c in search.top_technologies(jobs, limit)
@@ -253,11 +269,13 @@ _BOOL = {"type": "boolean"}
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_jobs",
-        "title": "Search Swiss dev jobs",
+        "title": "Search dev jobs across 7 countries",
         "description": (
-            "Search swissdevjobs.ch, where every posting must publish a salary range. "
-            "Jobs already applied to are hidden unless include_applied is true. "
-            "Returns compact rows; call get_job for the full posting."
+            "Search the devitjobs board family — Switzerland, Germany, UK, "
+            "US/Canada, Netherlands, France — where every posting must publish "
+            "a salary range. Jobs already applied to are hidden unless "
+            "include_applied is true. Returns compact rows; call get_job for "
+            "the full posting."
         ),
         "inputSchema": {
             "type": "object",
@@ -296,10 +314,17 @@ TOOLS: list[dict[str, Any]] = [
                     **_BOOL,
                     "description": "show jobs already applied to",
                 },
+                "country": {
+                    **_STR,
+                    "enum": ["all", "ch", "de", "uk", "us", "nl", "fr"],
+                    "description": (
+                        "one board, or 'all' for every enabled board (default)"
+                    ),
+                },
             },
         },
         "annotations": {
-            "title": "Search Swiss dev jobs",
+            "title": "Search dev jobs across 7 countries",
             "readOnlyHint": True,
             "openWorldHint": True,
         },
@@ -528,9 +553,10 @@ def handle_request(
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": _version()},
                 "instructions": (
-                    "Search and apply to Swiss developer jobs. Every posting "
-                    "carries a published salary range. Applying is irreversible: "
-                    "call apply_to_job "
+                    "Search and apply to developer jobs in Switzerland, Germany, "
+                    "the UK, the US/Canada, the Netherlands, and France. Every "
+                    "posting carries a published salary range. Applying is "
+                    "irreversible: call apply_to_job "
                     "without confirm first, show the user what would be sent, and only "
                     "re-call with confirm=true once they have agreed."
                 ),

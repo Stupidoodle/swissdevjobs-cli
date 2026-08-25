@@ -15,8 +15,8 @@ class JobRepository(Protocol):
         """Upsert feed rows; a re-listed slug under a new id replaces the old row."""
         ...
 
-    def cached_jobs(self, max_age_seconds: int = 600) -> list[Job] | None:
-        """All cached rows if the cache is fresh enough, else None."""
+    def cached_jobs(self, source: str, max_age_seconds: int = 600) -> list[Job] | None:
+        """One board's cached rows if fresh enough, else None."""
         ...
 
     def store_detail(self, job_id: str, detail_raw: Mapping[str, Any]) -> None:

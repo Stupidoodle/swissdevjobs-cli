@@ -39,8 +39,9 @@ def _decorate_posted_at(wire: dict[str, Any]) -> dict[str, Any]:
 
 
 def job_from_wire(wire: Mapping[str, Any], board: Board) -> Job:
-    """One jobsLight row → domain Job. Decorates raw with postedAt fields."""
+    """One jobsLight row → domain Job. Decorates raw with postedAt + country."""
     raw = _decorate_posted_at(dict(wire))
+    raw["country"] = board.country
     return Job(
         id=JobId(raw.get("_id") or ""),
         slug=raw.get("jobUrl") or "",
@@ -49,6 +50,7 @@ def job_from_wire(wire: Mapping[str, Any], board: Board) -> Job:
         city=raw.get("actualCity") or raw.get("cityCategory"),
         salary=SalaryRange.from_wire(raw, currency=board.currency),
         posted_at_unix=raw["postedAtUnix"],
+        board=board,
         raw=raw,
     )
 
@@ -59,7 +61,9 @@ def jobs_from_wire(wire_rows: list[Mapping[str, Any]], board: Board) -> list[Job
 
 
 def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
-    """A job-detail payload → domain JobDetail. Raw is passed through untouched."""
+    """A job-detail payload → domain JobDetail. Raw gains only a country tag."""
+    raw = dict(wire)
+    raw["country"] = board.country
     return JobDetail(
         id=JobId(wire.get("_id") or ""),
         slug=wire.get("jobUrl") or "",
@@ -73,7 +77,8 @@ def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
         redirect_url=wire.get("redirectJobUrl"),
         questions=tuple(wire.get("applyQuestions") or ()),
         has_lang_check=bool(wire.get("hasLangCheck", False)),
-        raw=wire,
+        board=board,
+        raw=raw,
     )
 
 

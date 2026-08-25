@@ -24,6 +24,7 @@ class JobSummaryDTO:
     language: str | None
     technologies: list[str]
     posted_at: str | None
+    country: str
     url: str
 
     @classmethod
@@ -31,6 +32,7 @@ class JobSummaryDTO:
         """Build from a domain Job; renders wire fields from `raw`."""
         raw = job.raw
         return cls(
+            country=job.board.country,
             job_id=raw.get("_id"),
             title=raw.get("name"),
             company=raw.get("company"),
@@ -59,6 +61,7 @@ class JobSummaryDTO:
             "language": self.language,
             "technologies": self.technologies,
             "posted_at": self.posted_at,
+            "country": self.country,
             "url": self.url,
         }
 

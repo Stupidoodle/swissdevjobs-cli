@@ -115,6 +115,37 @@ def load() -> list[str]:
     return LOADED
 
 
+def set_value(key: str, value: str, path: Path | None = None) -> Path:
+    """Set KEY=value in the config-dir .env, replacing an existing line.
+
+    Creates the file (owner-only) when missing. Used by `sdj config
+    --countries` so a UX toggle survives across sessions without the user
+    editing a file by hand.
+    """
+    target = path or (config_dir() / ".env")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lines: list = []
+    replaced = False
+    if target.exists():
+        for line in target.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            body = (
+                stripped[len("export ") :]
+                if stripped.startswith("export ")
+                else stripped
+            )
+            if "=" in body and body.split("=", 1)[0].strip() == key:
+                lines.append(f"{key}={value}")
+                replaced = True
+            else:
+                lines.append(line)
+    if not replaced:
+        lines.append(f"{key}={value}")
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    target.chmod(0o600)
+    return target
+
+
 def write_template(path: Path | None = None) -> Path:
     """Write a starter .env, refusing to clobber an existing one."""
     target = path or (config_dir() / ".env")

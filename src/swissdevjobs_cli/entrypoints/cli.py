@@ -12,6 +12,7 @@ import webbrowser
 
 from swissdevjobs_cli import bootstrap
 from swissdevjobs_cli.adapters import envfile
+from swissdevjobs_cli.adapters.boards.registry import BOARDS
 from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
 from swissdevjobs_cli.adapters.http.client import CaptchaRequired, store_clearance
 from swissdevjobs_cli.domain.model.application import Applicant
@@ -28,15 +29,15 @@ from swissdevjobs_cli.service_layer import search, tracking
 # browser, let them solve it, and paste the cf_clearance cookie back here.
 
 
-def interactive_unblock(runtime: bootstrap.Runtime, challenge_url: str) -> bool:
+def interactive_unblock(challenge_url: str) -> bool:
     """Block the CLI, open the URL in a browser, prompt for the cf_clearance cookie.
 
     Returns True once the cookie is stored so callers may retry; False if
     aborted. Designed to be safely called from any command — it is a
-    synchronous gate.
+    synchronous gate. The cookie domain is derived from the challenged URL,
+    so this works for any board of the family.
     """
-    board = runtime.board_config
-    host = board.base_url.split("//", 1)[-1]
+    host = challenge_url.split("//", 1)[-1].split("/", 1)[0]
     print("", file=sys.stderr)
     print("Cloudflare challenge detected.", file=sys.stderr)
     print(f"Opening {challenge_url} in your default browser.", file=sys.stderr)
@@ -66,7 +67,7 @@ def with_retry(runtime: bootstrap.Runtime, fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except CaptchaRequired as e:
-        if interactive_unblock(runtime, e.url):
+        if interactive_unblock(e.url):
             return fn(*args, **kwargs)
         raise
 
@@ -90,6 +91,7 @@ def _print_row(j: Job) -> None:
         date_col = ""
     line = (
         f"{raw['_id']}  "
+        f"{j.board.country:3}  "
         f"{date_col:24}  "
         f"{(raw.get('name') or '')[:48]:48}  "
         f"{(raw.get('company') or '')[:25]:25}  "
@@ -122,8 +124,13 @@ def _window(filtered: list, args: argparse.Namespace, total: int):
 
 def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Search, filter, sort, and print the feed."""
-    uow, board = runtime.uow, runtime.board
-    jobs = with_retry(runtime, search.list_jobs, uow, board, force=args.refresh)
+    uow = runtime.uow
+    boards = (
+        [runtime.boards[c] for c in args.country]
+        if args.country
+        else runtime.enabled_boards()
+    )
+    jobs = with_retry(runtime, search.list_jobs, uow, boards, force=args.refresh)
     filtered = [
         j
         for j in jobs
@@ -200,12 +207,13 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Print one posting in full."""
-    uow, board = runtime.uow, runtime.board
-    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    uow = runtime.uow
+    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
+    board = runtime.board_for(job)
     detail = with_retry(
         runtime, search.get_detail, uow, board, str(job.id), force=args.refresh
     )
@@ -226,7 +234,7 @@ def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     )
     print(f"Salary:     {detail.salary.format()}")
     print(f"Tech:       {', '.join(raw.get('technologies') or [])}")
-    print(f"URL:        {acl.posting_url(runtime.board_config, raw.get('jobUrl', ''))}")
+    print(f"URL:        {acl.posting_url(detail.board, raw.get('jobUrl', ''))}")
     print(
         f"Contact:    {raw.get('candidateContactWay')}  "
         f"{raw.get('emailAddressForApplications') or raw.get('redirectJobUrl') or ''}"
@@ -248,12 +256,12 @@ def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def cmd_open(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Open a posting in the default browser."""
-    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.board)
+    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
-    url = acl.posting_url(runtime.board_config, job.slug)
+    url = acl.posting_url(job.board, job.slug)
     print(url)
     webbrowser.open(url, new=2)
     return 0
@@ -301,16 +309,17 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
     With --complete <method>, marks the job as applied (for email/browser modes).
     """
-    uow, board = runtime.uow, runtime.board
-    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    uow = runtime.uow
+    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
+    board = runtime.board_for(job)
     detail = with_retry(runtime, search.get_detail, uow, board, str(job.id))
     raw = detail.raw
 
-    posting_url = acl.posting_url(runtime.board_config, raw.get("jobUrl", ""))
+    posting_url = acl.posting_url(detail.board, raw.get("jobUrl", ""))
     existing = tracking.existing_application(uow, str(detail.id))
 
     # If --complete flag is set, mark as applied
@@ -360,7 +369,7 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def cmd_tech(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Print the most-tagged technologies across the feed."""
-    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.board)
+    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.enabled_boards())
     top = search.top_technologies(jobs, args.limit)
     if args.json:
         print(json.dumps(top, indent=2))
@@ -371,8 +380,9 @@ def cmd_tech(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 
 def cmd_auth(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
-    """Proactively open the site so the user can clear a Cloudflare challenge."""
-    ok = interactive_unblock(runtime, runtime.board_config.base_url + "/")
+    """Proactively open a board so the user can clear a Cloudflare challenge."""
+    board = runtime.boards[args.country].board
+    ok = interactive_unblock(board.base_url + "/")
     return 0 if ok else 1
 
 
@@ -469,7 +479,7 @@ def _resolve_motivation(value: str) -> str | None:
 
 def _direct_apply_preflight(args, runtime, job):
     """Dedup + deliverability checks. Returns the detail, or an exit code."""
-    uow, board = runtime.uow, runtime.board
+    uow, board = runtime.uow, runtime.board_for(job)
 
     # Check for existing application (dedup as data, not error)
     existing = tracking.existing_application(uow, str(job.id))
@@ -519,13 +529,13 @@ def cmd_direct_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> in
     Auto-marks job as applied on success. Returns {"already_applied": true} if
     already applied (use --force to override).
     """
-    uow, board = runtime.uow, runtime.board
+    uow = runtime.uow
 
     resolved = _resolve_identity(args)
     if resolved is None:
         return 1
 
-    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
@@ -549,8 +559,9 @@ def cmd_direct_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> in
         lang_skills=args.lang_skills,
     )
 
+    board = runtime.board_for(job)
     if not args.json:
-        print("Submitting direct application to SwissDevJobs...")
+        print(f"Submitting direct application to {board.board.name}...")
         print(
             f"  Role:    {raw.get('name')} @ {raw.get('company')} "
             f"({raw.get('actualCity')})"
@@ -587,6 +598,21 @@ def cmd_direct_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> in
 
 def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Show the resolved configuration, or scaffold a .env file."""
+    if args.countries:
+        value = args.countries.strip().lower()
+        codes = [c.strip() for c in value.split(",")]
+        unknown = [c for c in codes if c != "all" and c not in BOARDS]
+        if unknown:
+            print(
+                f"Error: unknown country code(s): {', '.join(unknown)}. "
+                f"Known: {', '.join(sorted(BOARDS))} or 'all'.",
+                file=sys.stderr,
+            )
+            return 1
+        path = envfile.set_value("SDJ_COUNTRIES", value)
+        print(f"Wrote SDJ_COUNTRIES={value} to {path}")
+        return 0
+
     if args.init:
         try:
             path = envfile.write_template()
@@ -605,6 +631,7 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         cookie_file=locations["cookie_file"],
         db_path=locations["db_path"],
     )
+    resolved["countries"] = runtime.enabled
 
     if args.json:
         print(json.dumps(resolved, indent=2))
@@ -614,6 +641,10 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     print(f"  SDJ_NAME     {resolved['name'] or '(unset)'}")
     print(f"  SDJ_EMAIL    {resolved['email'] or '(unset)'}")
     print(f"  SDJ_CV       {resolved['cv'] or '(unset)'}")
+    print()
+    print("Boards")
+    print(f"  enabled      {', '.join(resolved['countries'])}")
+    print("  change with  sdj config --countries ch,de  (or 'all')")
     print()
     print("Paths")
     print(f"  cache dir    {resolved['cache_dir']}")
@@ -648,6 +679,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lp.add_argument(
         "--tech-all", action="store_true", help="require ALL --tech tags (default any)"
+    )
+    lp.add_argument(
+        "--country",
+        action="append",
+        choices=sorted(BOARDS),
+        help="repeatable board selector, e.g. --country ch --country de "
+        "(default: the boards enabled via SDJ_COUNTRIES)",
     )
     lp.add_argument("--location", help="city substring, e.g. Zurich")
     lp.add_argument("--remote", action="store_true", help="remote or hybrid only")
@@ -728,7 +766,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apl.set_defaults(func=cmd_apply)
 
-    ap = sub.add_parser("auth", help="Open the site to resolve a Cloudflare challenge")
+    ap = sub.add_parser("auth", help="Open a board to resolve a Cloudflare challenge")
+    ap.add_argument(
+        "--country",
+        default="ch",
+        choices=sorted(BOARDS),
+        help="which board to open (default: ch)",
+    )
     ap.set_defaults(func=cmd_auth)
 
     da = sub.add_parser(
@@ -781,6 +825,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--init",
         action="store_true",
         help="write a starter .env to the config directory",
+    )
+    cf.add_argument(
+        "--countries",
+        metavar="LIST",
+        help="persist which boards to search, e.g. 'ch,de' or 'all' "
+        "(writes SDJ_COUNTRIES to the config .env)",
     )
     cf.add_argument("--json", action="store_true")
     cf.set_defaults(func=cmd_config)

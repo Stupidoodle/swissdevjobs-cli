@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
@@ -14,20 +14,22 @@ from swissdevjobs_cli.domain.ports.unit_of_work import UnitOfWork
 
 def list_jobs(
     uow: UnitOfWork,
-    board: BoardPort,
+    boards: Sequence[BoardPort],
     *,
     max_age_seconds: int = 600,
     force: bool = False,
 ) -> list[Job]:
-    """The board's feed, served from the cache when fresh enough."""
-    if not force:
-        cached = uow.jobs.cached_jobs(max_age_seconds)
-        if cached is not None:
-            return cached
-
-    jobs = board.fetch_jobs(force=force)
-    uow.jobs.store_jobs(jobs)
-    return jobs
+    """The combined feed of every requested board, each cached independently."""
+    combined: list[Job] = []
+    for board in boards:
+        jobs = None
+        if not force:
+            jobs = uow.jobs.cached_jobs(board.board.source, max_age_seconds)
+        if jobs is None:
+            jobs = board.fetch_jobs(force=force)
+            uow.jobs.store_jobs(jobs)
+        combined.extend(jobs)
+    return combined
 
 
 def get_detail(

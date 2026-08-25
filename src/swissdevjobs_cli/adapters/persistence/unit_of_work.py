@@ -12,7 +12,6 @@ from swissdevjobs_cli.adapters.persistence.repositories import (
     SqliteJobRepository,
 )
 from swissdevjobs_cli.adapters.persistence.tables import SCHEMA
-from swissdevjobs_cli.domain.model.board import Board
 
 
 class SqliteUnitOfWork:
@@ -24,12 +23,11 @@ class SqliteUnitOfWork:
     applications-log.md are imported.
     """
 
-    def __init__(self, db_path: Path, cache_dir: Path, config_dir: Path, board: Board):
-        """Remember locations and the board; connect lazily on first use."""
+    def __init__(self, db_path: Path, cache_dir: Path, config_dir: Path):
+        """Remember filesystem locations; connect lazily on first use."""
         self.db_path = db_path
         self._cache_dir = cache_dir
         self._config_dir = config_dir
-        self._board = board
         self._conn: sqlite3.Connection | None = None
         self._jobs: SqliteJobRepository | None = None
         self._applications: SqliteApplicationRepository | None = None
@@ -43,20 +41,22 @@ class SqliteUnitOfWork:
         return self._conn
 
     def _initialize(self, conn: sqlite3.Connection) -> None:
-        conn.executescript(SCHEMA)
-        # Schema migration: add active_from column to pre-existing DBs.
+        # v1 → v2 migration: the jobs table gained `source`, `light_json`, and
+        # per-board slug uniqueness. It is a pure cache, so the cheapest safe
+        # migration is to drop and refetch — applications are NOT touched.
         cols = {
             row["name"] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()
         }
-        if "active_from" not in cols:
-            conn.execute("ALTER TABLE jobs ADD COLUMN active_from TEXT")
+        if cols and "source" not in cols:
+            conn.execute("DROP TABLE jobs")
+        conn.executescript(SCHEMA)
         conn.commit()
 
         # Auto-migrate only when the database holds no jobs yet.
         job_count = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         if job_count == 0:
-            self._jobs = SqliteJobRepository(conn, self._board)
-            legacy_import.import_json_cache(self._jobs, self._cache_dir, self._board)
+            self._jobs = SqliteJobRepository(conn)
+            legacy_import.import_json_cache(self._jobs, self._cache_dir)
             log = legacy_import.find_markdown_log(self._config_dir)
             if log is not None:
                 legacy_import.import_markdown_log(conn, log)
@@ -66,7 +66,7 @@ class SqliteUnitOfWork:
         """The jobs cache repository."""
         conn = self._connect()
         if self._jobs is None:
-            self._jobs = SqliteJobRepository(conn, self._board)
+            self._jobs = SqliteJobRepository(conn)
         return self._jobs
 
     @property

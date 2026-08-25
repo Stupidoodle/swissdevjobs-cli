@@ -10,17 +10,15 @@ from typing import Any
 
 from swissdevjobs_cli.adapters.persistence import mappers
 from swissdevjobs_cli.domain.model.application import ApplicationRecord
-from swissdevjobs_cli.domain.model.board import Board
 from swissdevjobs_cli.domain.model.job import Job
 
 
 class SqliteJobRepository:
     """The jobs cache: lightweight feed rows plus raw detail payloads."""
 
-    def __init__(self, conn: sqlite3.Connection, board: Board):
-        """Share the UoW connection; the board supplies the salary currency."""
+    def __init__(self, conn: sqlite3.Connection):
+        """Share the UoW connection."""
         self._conn = conn
-        self._board = board
 
     def store_jobs(self, jobs: list[Job]) -> None:
         """Upsert feed rows; a re-listed slug under a new id replaces the old row."""
@@ -32,17 +30,20 @@ class SqliteJobRepository:
             # row first.
             if raw.get("jobUrl") and raw.get("_id"):
                 self._conn.execute(
-                    "DELETE FROM jobs WHERE job_url = ? AND _id != ?",
-                    (raw.get("jobUrl"), raw.get("_id")),
+                    "DELETE FROM jobs WHERE source = ? AND job_url = ? AND _id != ?",
+                    (job.board.source, raw.get("jobUrl"), raw.get("_id")),
                 )
             self._conn.execute(
-                """INSERT INTO jobs (_id, job_url, company, name, actual_city,
-                                     workplace, language, annual_salary_from,
-                                     annual_salary_to, technologies, filter_tags,
+                """INSERT INTO jobs (_id, source, job_url, company, name,
+                                     actual_city, workplace, language,
+                                     annual_salary_from, annual_salary_to,
+                                     technologies, filter_tags,
                                      candidate_contact_way, email_address,
-                                     redirect_url, active_from, light_fetched_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                     redirect_url, active_from, light_json,
+                                     light_fetched_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(_id) DO UPDATE SET
+                       source = excluded.source,
                        job_url = excluded.job_url,
                        company = excluded.company,
                        name = excluded.name,
@@ -57,15 +58,22 @@ class SqliteJobRepository:
                        email_address = excluded.email_address,
                        redirect_url = excluded.redirect_url,
                        active_from = excluded.active_from,
+                       light_json = excluded.light_json,
                        light_fetched_at = excluded.light_fetched_at""",
                 mappers.job_to_row_params(job, now),
             )
         self._conn.commit()
 
-    def cached_jobs(self, max_age_seconds: int = 600) -> list[Job] | None:
-        """All cached rows if the cache is fresh enough, else None."""
+    def cached_jobs(self, source: str, max_age_seconds: int = 600) -> list[Job] | None:
+        """One board's cached rows if fresh enough, else None.
+
+        Freshness is judged per board — a warm CH cache must not make a
+        never-fetched DE board look fresh.
+        """
         cursor = self._conn.execute(
-            "SELECT light_fetched_at FROM jobs ORDER BY light_fetched_at DESC LIMIT 1"
+            "SELECT light_fetched_at FROM jobs WHERE source = ? "
+            "ORDER BY light_fetched_at DESC LIMIT 1",
+            (source,),
         )
         row = cursor.fetchone()
         if not row or not row["light_fetched_at"]:
@@ -76,8 +84,8 @@ class SqliteJobRepository:
         if age > max_age_seconds:
             return None
 
-        cursor = self._conn.execute("SELECT * FROM jobs")
-        return [mappers.row_to_job(r, self._board) for r in cursor.fetchall()]
+        cursor = self._conn.execute("SELECT * FROM jobs WHERE source = ?", (source,))
+        return [mappers.row_to_job(r) for r in cursor.fetchall()]
 
     def store_detail(self, job_id: str, detail_raw: Mapping[str, Any]) -> None:
         """Persist the raw detail payload for one job."""

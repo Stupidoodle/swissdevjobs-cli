@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from swissdevjobs_cli.domain.model.board import Board
 from swissdevjobs_cli.domain.model.ids import JobId
 from swissdevjobs_cli.domain.model.salary import SalaryRange
 
@@ -37,6 +38,7 @@ class Job:
     city: str | None
     salary: SalaryRange
     posted_at_unix: int | None
+    board: Board
     raw: Mapping[str, Any]
 
 
@@ -56,4 +58,5 @@ class JobDetail:
     redirect_url: str | None
     questions: tuple[Any, ...]
     has_lang_check: bool
+    board: Board
     raw: Mapping[str, Any]

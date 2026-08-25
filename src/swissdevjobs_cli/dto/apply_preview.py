@@ -16,6 +16,7 @@ class WouldSubmitDTO:
     role: str | None
     company: str | None
     location: str | None
+    board: str
     salary: str
     applicant_name: str
     applicant_email: str
@@ -33,6 +34,7 @@ class WouldSubmitDTO:
             role=raw.get("name"),
             company=raw.get("company"),
             location=raw.get("actualCity"),
+            board=f"{detail.board.name} ({detail.board.country})",
             salary=detail.salary.format(),
             applicant_name=applicant.name,
             applicant_email=applicant.email,
@@ -47,6 +49,7 @@ class WouldSubmitDTO:
             "role": self.role,
             "company": self.company,
             "location": self.location,
+            "board": self.board,
             "salary": self.salary,
             "applicant": {"name": self.applicant_name, "email": self.applicant_email},
             "cv_path": self.cv_path,

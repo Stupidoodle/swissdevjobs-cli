@@ -8,6 +8,20 @@ from typing import Any
 from swissdevjobs_cli.domain.model.application import Applicant
 
 
+def enabled_countries(known: list[str]) -> list[str]:
+    """Which boards to search, from $SDJ_COUNTRIES ("all" or "ch,de"; default all).
+
+    Unknown codes are ignored rather than fatal — a typo in a .env file must
+    not brick every command. An empty result falls back to all boards.
+    """
+    value = (os.environ.get("SDJ_COUNTRIES") or "all").strip().lower()
+    if value in ("", "all"):
+        return list(known)
+    picked = [c.strip() for c in value.split(",")]
+    valid = [c for c in picked if c in known]
+    return valid or list(known)
+
+
 def resolve_applicant(
     name: str | None,
     email: str | None,

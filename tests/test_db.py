@@ -8,7 +8,7 @@ from swissdevjobs_cli.service_layer import tracking
 
 def test_upsert_then_read_back_round_trips(fresh_uow):
     fresh_uow.jobs.store_jobs([domain_job()])
-    cached = fresh_uow.jobs.cached_jobs(max_age_seconds=600)
+    cached = fresh_uow.jobs.cached_jobs("swissdevjobs", max_age_seconds=600)
     assert len(cached) == 1
     assert cached[0].raw["company"] == "Acme AG"
     assert cached[0].raw["technologies"] == ["Python", "Kubernetes"]
@@ -16,12 +16,12 @@ def test_upsert_then_read_back_round_trips(fresh_uow):
 
 def test_cached_jobs_expire(fresh_uow):
     fresh_uow.jobs.store_jobs([domain_job()])
-    assert fresh_uow.jobs.cached_jobs(max_age_seconds=0) is None
+    assert fresh_uow.jobs.cached_jobs("swissdevjobs", max_age_seconds=0) is None
 
 
 def test_read_back_decodes_posted_at_from_the_id(fresh_uow):
     fresh_uow.jobs.store_jobs([domain_job()])
-    cached = fresh_uow.jobs.cached_jobs()
+    cached = fresh_uow.jobs.cached_jobs("swissdevjobs")
     assert cached[0].raw["postedAtUnix"] == 0x62ECCD7A
     assert cached[0].raw["postedAt"].startswith("2022-08-05")
 
@@ -30,7 +30,7 @@ def test_a_relisted_posting_reusing_a_slug_replaces_the_old_row(fresh_uow):
     """The jobs table has UNIQUE(job_url); a re-listed job gets a fresh _id."""
     fresh_uow.jobs.store_jobs([domain_job(_id="62eccd7a57370f0152e4950e")])
     fresh_uow.jobs.store_jobs([domain_job(_id="68b0000057370f0152e4950e")])
-    cached = fresh_uow.jobs.cached_jobs()
+    cached = fresh_uow.jobs.cached_jobs("swissdevjobs")
     assert len(cached) == 1
     assert cached[0].raw["_id"] == "68b0000057370f0152e4950e"
 

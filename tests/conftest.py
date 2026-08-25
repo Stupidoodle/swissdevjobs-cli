@@ -43,7 +43,7 @@ def test_sandbox_is_active():
 @pytest.fixture
 def fresh_uow(tmp_path):
     """A brand-new database per test."""
-    uow = SqliteUnitOfWork(tmp_path / "test.db", tmp_path, tmp_path / "config", CH)
+    uow = SqliteUnitOfWork(tmp_path / "test.db", tmp_path, tmp_path / "config")
     yield uow
     uow.close()
 

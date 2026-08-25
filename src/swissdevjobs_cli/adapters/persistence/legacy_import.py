@@ -39,9 +39,16 @@ METHOD_MAP = {
 }
 
 
-def import_json_cache(jobs_repo, cache_dir: Path, board) -> int:
-    """Import pre-SQLite JSON cache files, via the ACL so rows are normalized."""
+def import_json_cache(jobs_repo, cache_dir: Path) -> int:
+    """Import pre-SQLite JSON cache files, via the ACL so rows are normalized.
+
+    Legacy caches predate multi-board support, so every row is a
+    swissdevjobs.ch (CH) row by definition.
+    """
+    from swissdevjobs_cli.adapters.boards.registry import BOARDS
     from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
+
+    board = BOARDS["ch"]
 
     imported = 0
 

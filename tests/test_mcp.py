@@ -47,7 +47,7 @@ def board():
 
 @pytest.fixture
 def runtime(board, fresh_uow):
-    return Runtime(board=board, uow=fresh_uow)
+    return Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
 
 
 def call(runtime, tool, /, **arguments):
@@ -263,7 +263,7 @@ def test_an_undeliverable_posting_is_refused_even_with_confirm(fresh_uow, tmp_pa
             redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
         )
     )
-    runtime = Runtime(board=board, uow=fresh_uow)
+    runtime = Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
     result = call(
