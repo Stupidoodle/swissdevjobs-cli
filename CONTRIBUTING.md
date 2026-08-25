@@ -16,12 +16,23 @@ If you want to build one yourself anyway, the whole contract lives in
 implementation behind its own anti-corruption layer, and everything else in
 the tool picks it up from the registry.
 
+## Know a market better than we do?
+
+The per-country CV conventions in [`skill/cv/`](skill/cv/) (photo or not,
+one page or two, which permit line recruiters filter on) are written to be
+corrected by people who actually apply in those markets. If a convention is
+wrong or missing, a small PR against the country file is the single most
+useful contribution this repo can receive. Mirror the change into
+`plugin/skills/swissdevjobs/cv/` — a test enforces the two stay identical.
+
 ## Bugs and small fixes
 
 Bug reports with reproduction steps are always welcome. Small PRs (typos,
 error messages, a missing edge case with a test) too. For anything larger,
-open an issue first so we agree on the shape before you spend a weekend
-on it.
+start a thread in
+[Discussions → Ideas](https://github.com/Stupidoodle/swissdevjobs-cli/discussions/categories/ideas)
+first so we agree on the shape before you spend a weekend on it. The issue
+tracker is for bugs and board requests; design lives in Discussions.
 
 ## Working on the code
 

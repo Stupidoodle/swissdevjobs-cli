@@ -39,7 +39,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
 
 ## Contents
 
-- [Install](#install) · [Why](#why) · [Boards](#boards) · [Configure](#configure) · [Commands](#commands)
+- [Why](#why) · [Please be reasonable](#please-be-reasonable) · [Install](#install) · [Boards](#boards) · [Configure](#configure) · [Commands](#commands)
 - [How applying works](#how-applying-works) · [Filtering](#filtering)
 - [MCP server](#mcp-server) · [Under the hood](#under-the-hood) · [Cloudflare](#cloudflare)
 - [Claude Code skill](#claude-code-skill) · [Development](#development)
@@ -57,6 +57,17 @@ $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
 | 🤖 **Agent-native** | An [MCP server](#mcp-server) plus `--json` on every command; duplicates come back as *data*, not errors |
 | 📦 **Zero dependencies** | Python stdlib only. No `requests`, no `pydantic`, no supply chain |
 | 🎯 **Refuses to black-hole your application** | Detects postings the site can't actually deliver and tells you where to apply instead |
+
+---
+
+## Please be reasonable
+
+This talks to somebody else's website, built by a small team who chose to make salary
+transparency mandatory. Keep your request volume human. Don't strip the caching. Don't
+fire off applications to postings you haven't read — that wastes a real recruiter's
+afternoon and poisons the well for everyone using the board honestly.
+
+Read swissdevjobs.ch's terms before you automate anything on top of this.
 
 ---
 
@@ -840,17 +851,6 @@ CI runs the same gate on Python 3.9 and 3.14, and starts the MCP server to
 verify it still completes a handshake. Architecture rules and contributor
 ground rules live in [CLAUDE.md](CLAUDE.md) and
 [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
-
-## Please be reasonable
-
-This talks to somebody else's website, built by a small team who chose to make salary
-transparency mandatory. Keep your request volume human. Don't strip the caching. Don't
-fire off applications to postings you haven't read — that wastes a real recruiter's
-afternoon and poisons the well for everyone using the board honestly.
-
-Read swissdevjobs.ch's terms before you automate anything on top of this.
 
 ---
 
