@@ -12,8 +12,14 @@ dev/IT jobs from swissdevjobs.ch.
 an MCP server exposing `search_jobs`, `get_job`, `apply_to_job`,
 `list_applications`, `mark_applied` and `top_technologies`. If those tools are
 available, use them — they return structured data directly and `apply_to_job`
-carries its own confirmation gate. Fall back to the CLI below when they are
-not. Register it with `claude mcp add swissdevjobs -- swissdevjobs-mcp`.
+carries its own confirmation gate. Fall back to the CLI below when they are not.
+
+The easiest way to get them is the plugin, which bundles its own skill:
+
+```
+/plugin marketplace add Stupidoodle/swissdevjobs-cli
+/plugin install swissdevjobs@swissdevjobs
+```
 
 ## Setup
 

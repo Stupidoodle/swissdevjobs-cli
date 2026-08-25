@@ -7,7 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
-[![MCP](https://img.shields.io/badge/MCP-server%20included-8A63D2.svg)](#mcp-server)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2.svg)](#install)
+[![MCP](https://img.shields.io/badge/MCP-server%20included-6E56CF.svg)](#mcp-server)
 [![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
 
 </div>
@@ -30,7 +31,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
 
 ## Contents
 
-- [Why](#why) · [Install](#install) · [Configure](#configure) · [Commands](#commands)
+- [Install](#install) · [Why](#why) · [Configure](#configure) · [Commands](#commands)
 - [How applying works](#how-applying-works) · [Filtering](#filtering)
 - [MCP server](#mcp-server) · [Under the hood](#under-the-hood) · [Cloudflare](#cloudflare)
 - [Claude Code skill](#claude-code-skill) · [Development](#development)
@@ -52,18 +53,40 @@ $ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
 
 ## Install
 
+### In Claude Code — two commands
+
 ```sh
-pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli
+/plugin marketplace add Stupidoodle/swissdevjobs-cli
+/plugin install swissdevjobs@swissdevjobs
+```
+
+That's it. Claude Code prompts for your name, email, and CV path, then starts
+the MCP server with `uvx` — nothing to install first, and no shell profile is
+touched. Ask it *"find me senior Python roles in Zurich over 140k"* and go.
+
+Requires [uv](https://docs.astral.sh/uv/) on your PATH
+(`brew install uv`, or `curl -LsSf https://astral.sh/uv/install.sh | sh`).
+
+### As a CLI
+
+```sh
+uv tool install git+https://github.com/Stupidoodle/swissdevjobs-cli
 ```
 
 <details>
 <summary>Other ways</summary>
 
 ```sh
+# pipx
+pipx install git+https://github.com/Stupidoodle/swissdevjobs-cli
+
 # from a checkout, editable
 git clone https://github.com/Stupidoodle/swissdevjobs-cli
 cd swissdevjobs-cli
-pipx install -e .        # or: pip install -e .
+uv tool install -e .     # or: pipx install -e .
+
+# no install at all — run it once
+uvx --from git+https://github.com/Stupidoodle/swissdevjobs-cli sdj list --remote
 ```
 
 Not published to PyPI.
@@ -343,9 +366,8 @@ origin-fresh data.
 
 ## MCP server
 
-Point any [MCP](https://modelcontextprotocol.io) client at `swissdevjobs-mcp`
-and your assistant can search, read postings, and apply — with a confirmation
-gate in front of anything irreversible.
+In Claude Code, the [plugin](#install) wires this up for you. For any other
+[MCP](https://modelcontextprotocol.io) client, point it at `swissdevjobs-mcp`:
 
 ```jsonc
 // Claude Code: .mcp.json  ·  Claude Desktop: claude_desktop_config.json
@@ -363,10 +385,14 @@ gate in front of anything irreversible.
 }
 ```
 
-In Claude Code, one line does it:
+No prior install needed if you have `uv` — swap the command for
+`uvx` and let it fetch:
 
-```sh
-claude mcp add swissdevjobs -- swissdevjobs-mcp
+```jsonc
+{
+  "command": "uvx",
+  "args": ["--from", "git+https://github.com/Stupidoodle/swissdevjobs-cli", "swissdevjobs-mcp"]
+}
 ```
 
 Then just ask: *"find me senior Python roles in Zurich over 140k and show me
@@ -575,20 +601,20 @@ Run `sdj auth` up front before scripting a batch of calls.
 
 ## Claude Code skill
 
-[`skill/SKILL.md`](skill/SKILL.md) wraps the CLI as a [Claude Code](https://claude.com/claude-code)
-skill, so an agent can run the whole search → shortlist → apply loop for you.
+The [plugin](#install) already bundles a skill that teaches the whole
+search → shortlist → apply loop, including the confirmation handshake. Install
+that and you're done.
+
+[`skill/SKILL.md`](skill/SKILL.md) is the standalone version, for driving the
+CLI without the plugin:
 
 ```sh
 mkdir -p ~/.claude/skills/swissdevjobs
 cp skill/SKILL.md ~/.claude/skills/swissdevjobs/
 ```
 
-```
-/swissdevjobs find senior python roles in zurich over 140k and show me the top 5
-```
-
-The skill hard-stops before every irreversible submit and asks you to confirm, refuses
-to type national ID or bank details into any form, and hands CAPTCHAs back to you.
+Either way the rules are the same: stop before every irreversible submit and ask,
+never type national ID or bank details into a form, hand CAPTCHAs back to you.
 
 ---
 
@@ -604,7 +630,9 @@ src/swissdevjobs_cli/
   payloads.py    Pure shaping shared by the CLI and MCP (never prints)
   mcp.py         JSON-RPC 2.0 server over stdio
   cli.py         argparse commands and output formatting
-skill/SKILL.md   Claude Code skill wrapper
+skill/SKILL.md   Standalone Claude Code skill
+plugin/          Claude Code plugin: manifest, .mcp.json, bundled skill
+.claude-plugin/  Marketplace manifest, so the repo installs itself
 tests/           63 offline tests — no network, sandboxed database
 ```
 
