@@ -16,8 +16,10 @@ def selector_tokens() -> list[str]:
     fallback. An empty variable means "all".
     """
     value = (
-        os.environ.get("SDJ_BOARDS") or os.environ.get("SDJ_COUNTRIES") or ""
-    ).strip().lower()
+        (os.environ.get("SDJ_BOARDS") or os.environ.get("SDJ_COUNTRIES") or "")
+        .strip()
+        .lower()
+    )
     return [t.strip() for t in value.split(",") if t.strip()] or ["all"]
 
 

@@ -33,6 +33,7 @@ from swissdevjobs_cli.service_layer import config as config_service
 from swissdevjobs_cli.service_layer import search, tracking
 
 PROTOCOL_VERSION = "2025-06-18"
+SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)
 SERVER_NAME = "swissdevjobs"
 
 # Derived from the registry so prose can never drift from the board list.
@@ -368,6 +369,9 @@ TOOLS: list[dict[str, Any]] = [
             "readOnlyHint": True,
             "openWorldHint": True,
         },
+        # Claude Code warns at 10k output tokens; a limit=100 search is ~14k.
+        # This raises the per-tool ceiling so max-limit searches stay quiet.
+        "_meta": {"anthropic/maxResultSizeChars": 200000},
         "handler": tool_search_jobs,
     },
     {
@@ -436,7 +440,10 @@ TOOLS: list[dict[str, Any]] = [
         "annotations": {
             "title": "Submit an application",
             "readOnlyHint": False,
-            "destructiveHint": False,
+            # destructiveHint deliberately OMITTED: the spec default is
+            # true, and an irreversible outward submission should get every
+            # confirmation layer a client keys on this hint — the in-band
+            # confirm gate stays as defense in depth.
             "idempotentHint": False,
             "openWorldHint": True,
         },
@@ -455,6 +462,7 @@ TOOLS: list[dict[str, Any]] = [
             "readOnlyHint": True,
             "openWorldHint": False,
         },
+        "_meta": {"anthropic/maxResultSizeChars": 200000},
         "handler": tool_list_applications,
     },
     {
@@ -503,6 +511,7 @@ TOOLS: list[dict[str, Any]] = [
 
 HANDLERS: dict[str, Callable[..., Any]] = {t["name"]: t["handler"] for t in TOOLS}
 TOOL_SPECS = [{k: v for k, v in t.items() if k != "handler"} for t in TOOLS]
+SPECS: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOL_SPECS}
 
 
 # --- JSON-RPC plumbing ------------------------------------------------------
@@ -531,21 +540,57 @@ def _content(payload: Any, is_error: bool = False) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
+_SCHEMA_TYPES = {"string": str, "integer": int, "boolean": bool, "array": list}
+
+
+def _invalid_argument(spec: dict[str, Any], arguments: dict[str, Any]) -> str | None:
+    """Check arguments against the tool's own declared inputSchema.
+
+    Enum membership and primitive types only — full JSON Schema validation
+    would need a dependency, and this covers the real failure mode: a typoed
+    enum value silently matching zero jobs, which an agent reads as "no jobs
+    exist" and stops searching.
+    """
+    schema = spec["inputSchema"]
+    props = schema.get("properties", {})
+    for required in schema.get("required", []):
+        if required not in arguments:
+            return f"Missing required argument {required!r}"
+    for key, value in arguments.items():
+        prop = props.get(key)
+        if prop is None:
+            return f"Unknown argument {key!r}; known: {', '.join(sorted(props))}"
+        if value is None:
+            continue
+        expected = _SCHEMA_TYPES.get(prop.get("type", ""))
+        is_bad_bool = prop.get("type") == "integer" and isinstance(value, bool)
+        if expected is not None and (not isinstance(value, expected) or is_bad_bool):
+            return f"{key} expects type {prop['type']}"
+        enum = prop.get("enum")
+        if enum is not None and value not in enum:
+            return f"{key} must be one of: {', '.join(map(str, enum))}"
+    return None
+
+
 def _dispatch_tool(
     request_id: Any, params: dict, runtime: bootstrap.Runtime | None
 ) -> dict:
     """Run one tool call, mapping every failure to an in-band error payload."""
-    name = params.get("name")
+    name = str(params.get("name") or "")
     handler = HANDLERS.get(name)
     if handler is None:
         return _error(request_id, -32602, f"Unknown tool: {name}")
+    arguments = params.get("arguments") or {}
+    problem = _invalid_argument(SPECS[name], arguments)
+    if problem is not None:
+        return _result(
+            request_id,
+            _content({"error": "invalid_arguments", "message": problem}, is_error=True),
+        )
     if runtime is None:
         runtime = bootstrap.build_runtime()
     try:
-        return _result(
-            request_id,
-            _content(handler(runtime, **(params.get("arguments") or {}))),
-        )
+        return _result(request_id, _content(handler(runtime, **arguments)))
     except CaptchaRequired as e:
         return _result(
             request_id,
@@ -588,10 +633,16 @@ def handle_request(
     params = message.get("params") or {}
 
     if method == "initialize":
+        # Single-version server: echo the client's version when we support
+        # it, otherwise answer with ours (the client then decides whether to
+        # disconnect). The membership check is what keeps this line honest
+        # the day a second protocol version lands.
+        requested = params.get("protocolVersion")
+        version = requested if requested in SUPPORTED_VERSIONS else PROTOCOL_VERSION
         return _result(
             request_id,
             {
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": _version()},
                 "instructions": (
@@ -615,13 +666,21 @@ def handle_request(
         return None
 
     if method == "tools/list":
+        # This server never returns nextCursor, so any cursor is invalid.
+        if params.get("cursor") is not None:
+            return _error(
+                request_id, -32602, "Invalid cursor: this server does not paginate"
+            )
         return _result(request_id, {"tools": TOOL_SPECS})
 
     if method == "tools/call":
         return _dispatch_tool(request_id, params, runtime)
 
-    if method in ("resources/list", "prompts/list"):
-        return _result(request_id, {"resources": [], "prompts": []})
+    if method == "resources/list":
+        return _result(request_id, {"resources": []})
+
+    if method == "prompts/list":
+        return _result(request_id, {"prompts": []})
 
     if method == "ping":
         return _result(request_id, {})
@@ -651,6 +710,19 @@ def serve(stdin=None, stdout=None) -> int:
         except json.JSONDecodeError as e:
             print(
                 json.dumps(_error(None, -32700, f"Parse error: {e}")),
+                file=stdout,
+                flush=True,
+            )
+            continue
+
+        # Valid JSON that isn't an object (an array — e.g. a legacy JSON-RPC
+        # batch, removed in spec 2025-06-18 — a number, a string) must get a
+        # -32600, not crash the whole session.
+        if not isinstance(message, dict):
+            print(
+                json.dumps(
+                    _error(None, -32600, "Invalid Request: expected a JSON object")
+                ),
                 file=stdout,
                 flush=True,
             )

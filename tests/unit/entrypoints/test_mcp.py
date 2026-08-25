@@ -421,6 +421,6 @@ def test_top_technologies_counts_tags(runtime):
 
 
 def test_resources_and_prompts_are_empty_but_answered():
-    for method in ("resources/list", "prompts/list"):
+    for method, key in (("resources/list", "resources"), ("prompts/list", "prompts")):
         response = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": method})
-        assert response["result"] == {"resources": [], "prompts": []}
+        assert response["result"] == {key: []}
