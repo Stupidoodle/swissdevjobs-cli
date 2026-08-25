@@ -31,10 +31,10 @@ job never shows up twice.
 
 ```console
 $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
-14 shown · 14 match filters · 4681 in feed · 3 hidden (already applied)
+57 shown · 57 match filters · 5521 in feed · 3 hidden (already applied)
 ----------------------------------------------------------------------------------------
-686f2a1c…  swissdevjobs    p=2026-08-19 a=2026-08-22  Senior Platform Engineer   Acme AG      Zurich   CHF 145'000–170'000  remote  Kubernetes, Go, Terraform
-6a8caf89…  germantechjobs  p=2026-08-24               Senior DevOps Engineer     Beispiel AG  Berlin   EUR 95'000–115'000   remote  Kubernetes, AWS, Python
+6a60ec82…  devitjobs-us    p=2026-07-22  Senior Maximo Systems Developer/Integrator  TEKsystems c/o Allegis Gr  Ottawa   USD 208'000–270'400  remote  API, Ansible, Bash, ESB, GIS, IBM
+6a6cc9bd…  devitjobs-us    p=2026-07-31  Senior Solutions Architect                  TEKsystems c/o Allegis Gr  Calgary  USD 187'200–228'800  remote  AI, API, Architect, Cloud, Docker
 ```
 
 ## Contents
@@ -123,15 +123,16 @@ Switzerland:
 | 🇨🇭 | [jobs.ch](https://www.jobs.ch) | Switzerland | **all industries** | CHF | none | 🌐 via ATS |
 | 🇨🇭 | [jobup.ch](https://www.jobup.ch) | Switzerland (Romandie) | **all industries** | CHF | none | 🌐 via ATS |
 
-All boards are searched by default. A selector is a country code (every board
-there) or a board id (just that one):
+All boards are searched by default. A selector is a board id (just that one)
+or a country code (every board there) — `--board`, with `--source` and
+`--country` as accepted aliases:
 
 ```sh
-sdj list --country de --country uk        # just Germany + UK, this once
-sdj list --country jobsch                 # just jobs.ch
-sdj config --countries ch,de              # persist: all CH boards + Germany
-sdj config --countries swissdevjobs       # persist: one board only
-sdj config --countries all                # back to everything
+sdj list --board jobsch                   # just jobs.ch
+sdj list --board de --board uk            # just Germany + UK, this once
+sdj config --boards ch,de                 # persist: all CH boards + Germany
+sdj config --boards swissdevjobs          # persist: one board only
+sdj config --boards all                   # back to everything
 ```
 
 **jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
@@ -139,9 +140,14 @@ mirrored (the API caps at 20 rows per page and 2,000 results per query), so
 they answer your query server-side, newest first — pass free text for real
 coverage, and `--category it` to stay in tech:
 
-```sh
-sdj list "pflegefachfrau" --country jobsch      # any industry, server-side search
-sdj list "python" --country ch --category it    # CH tech across all three boards
+```console
+$ sdj list "pflegefachfrau" --board jobsch --limit 2      # any industry, server-side
+2 shown · 100 match filters · 100 in feed
+----------------------------------------------------------------------------------------
+40b2f214…  jobsch  p=2026-08-25  Dauernachtwache - Dipl. Pflegefachperson HF / FH  Stiftung entero      Niederlenz  —
+b5367506…  jobsch  p=2026-08-25  Dipl. Pflegefachfrau HF/FH mit Fachverantwortung  Spital Männedorf AG  Männedorf   —
+
+$ sdj list "python" --board ch --category it              # CH tech across all three boards
 ```
 
 They publish no salary data (rendered honestly as `—`) and have **no native
@@ -177,9 +183,9 @@ SDJ_EMAIL="you@example.com"
 SDJ_CV="/absolute/path/to/cv.pdf"
 
 # Optional: which boards to search (default: all)
-# Country codes and/or board ids: ch, de, uk, us, nl, fr,
-# swissdevjobs, germantechjobs, devitjobs-*, jobsch, jobup
-# SDJ_COUNTRIES=ch,de
+# Board ids and/or country codes: jobsch, jobup, swissdevjobs,
+# germantechjobs, devitjobs-*, ch, de, uk, us, nl, fr
+# SDJ_BOARDS=ch,de
 ```
 
 ### Where settings come from
@@ -417,7 +423,7 @@ $ sdj direct-apply some-workday-job --json
 
 | flag | effect |
 |---|---|
-| `--country ch` *(repeatable)* | board selector — a country code (`ch` = all three Swiss boards) or a board id (`jobsch`); defaults to your enabled set |
+| `--board jobsch` *(repeatable)* | board selector — a board id (`jobsch`) or a country code (`ch` = all three Swiss boards); `--source`/`--country` are aliases; defaults to your enabled set |
 | `--category it` | narrow the all-industry boards to one category; devitjobs boards are all-IT already |
 | `--tech X` *(repeatable)* | match **any** listed tag; add `--tech-all` to require all of them |
 | `--location Zurich` | substring match on city |

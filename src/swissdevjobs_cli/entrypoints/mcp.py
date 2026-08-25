@@ -83,13 +83,18 @@ def tool_search_jobs(
     sort: str = "posted",
     limit: int = 25,
     include_applied: bool = False,
+    board: str | None = None,
     country: str = "all",
     category: str | None = None,
 ) -> dict[str, Any]:
-    """Compact search over the feed with every filter the CLI has."""
+    """Compact search over the feed with every filter the CLI has.
+
+    ``board`` is the selector; ``country`` is its pre-0.5.1 name, kept as an
+    alias (``board`` wins when both are passed).
+    """
     uow = runtime.uow
     jobs = search.list_jobs(
-        uow, _boards_for(runtime, country), query=query, category=category
+        uow, _boards_for(runtime, board or country), query=query, category=category
     )
     hits = [
         j
@@ -328,15 +333,20 @@ TOOLS: list[dict[str, Any]] = [
                     **_BOOL,
                     "description": "show jobs already applied to",
                 },
-                "country": {
+                "board": {
                     **_STR,
                     "enum": ["all", *registry.known_selectors()],
                     "description": (
-                        "board selector: a country code selects every board "
-                        "there ('ch' = swissdevjobs + jobs.ch + jobup.ch), a "
-                        "source id one board ('jobsch'), 'all' every enabled "
-                        "board (default)"
+                        "board selector: a board id selects one board "
+                        "('jobsch'), a country code every board there "
+                        "('ch' = swissdevjobs + jobs.ch + jobup.ch), 'all' "
+                        "every enabled board (default)"
                     ),
+                },
+                "country": {
+                    **_STR,
+                    "enum": ["all", *registry.known_selectors()],
+                    "description": "deprecated alias of `board`",
                 },
                 "category": {
                     **_STR,

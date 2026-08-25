@@ -23,6 +23,8 @@ def test_strip_html_turns_markup_into_readable_text():
     assert strip_html("<p>One</p><p>Two</p>") == "One\n\nTwo"
     assert strip_html("a<br>b<br/>c") == "a\nb\nc"
     assert strip_html("<ul><li>x</li></ul>") == "x"
+    # jobs.ch templates carry literal entities in their text nodes
+    assert strip_html("<p>M&amp;A &uuml;ber 60&nbsp;%</p>") == "M&A \u00fcber 60\u00a0%"
 
 
 def test_fallback_mode_prefers_a_real_email_address():

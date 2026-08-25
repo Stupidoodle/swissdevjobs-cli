@@ -95,10 +95,11 @@ opposite**:
 
 Two platforms, eight boards; `adapters/boards/registry.py` is the single
 source of truth, keyed by `source` (the value in the DB `source` column).
-Selectors — `--country`, `SDJ_COUNTRIES`, the MCP `country` param — accept a
-country code (expands to every board in that country: `ch` is three boards
-now) or a source id (`jobsch`). Never key anything by country: `Runtime`
-routes by `job.board.source`.
+Selectors — `--board` (aliases `--source`, `--country`), `SDJ_BOARDS`
+(fallback: the pre-0.5.1 `SDJ_COUNTRIES`), the MCP `board` param (deprecated
+alias `country`) — accept a source id (`jobsch`) or a country code (expands
+to every board in that country: `ch` is three boards now). Never key
+anything by country: `Runtime` routes by `job.board.source`.
 
 - **devitjobs** (worldwide/devitjobs/): swissdevjobs.ch, germantechjobs.de,
   devitjobs.uk, devitjobs.com (US+CA), devitjobs.nl, devitjobs.fr. Full-feed

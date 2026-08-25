@@ -9,12 +9,15 @@ from swissdevjobs_cli.domain.model.application import Applicant
 
 
 def selector_tokens() -> list[str]:
-    """The board selectors from $SDJ_COUNTRIES ("all", "ch,de", "jobsch", …).
+    """The board selectors from $SDJ_BOARDS ("all", "ch,de", "jobsch", …).
 
-    Tokens are country codes or board source ids; the registry resolves them.
-    An empty variable means "all".
+    Tokens are board source ids or country codes; the registry resolves
+    them. $SDJ_COUNTRIES is the pre-0.5.1 name and still read as a
+    fallback. An empty variable means "all".
     """
-    value = (os.environ.get("SDJ_COUNTRIES") or "").strip().lower()
+    value = (
+        os.environ.get("SDJ_BOARDS") or os.environ.get("SDJ_COUNTRIES") or ""
+    ).strip().lower()
     return [t.strip() for t in value.split(",") if t.strip()] or ["all"]
 
 

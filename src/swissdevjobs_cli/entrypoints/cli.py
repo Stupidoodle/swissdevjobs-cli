@@ -629,8 +629,8 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
                 file=sys.stderr,
             )
             return 1
-        path = envfile.set_value("SDJ_COUNTRIES", value)
-        print(f"Wrote SDJ_COUNTRIES={value} to {path}")
+        path = envfile.set_value("SDJ_BOARDS", value)
+        print(f"Wrote SDJ_BOARDS={value} to {path}")
         return 0
 
     if args.init:
@@ -651,6 +651,8 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         cookie_file=locations["cookie_file"],
         db_path=locations["db_path"],
     )
+    # "countries" predates board ids and stays for output compatibility.
+    resolved["boards"] = runtime.enabled
     resolved["countries"] = runtime.enabled
 
     if args.json:
@@ -663,8 +665,8 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     print(f"  SDJ_CV       {resolved['cv'] or '(unset)'}")
     print()
     print("Boards")
-    print(f"  enabled      {', '.join(resolved['countries'])}")
-    print("  change with  sdj config --countries ch,de  (or 'all')")
+    print(f"  enabled      {', '.join(resolved['boards'])}")
+    print("  change with  sdj config --boards jobsch,de  (or 'all')")
     print()
     print("Paths")
     print(f"  cache dir    {resolved['cache_dir']}")
@@ -703,12 +705,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--tech-all", action="store_true", help="require ALL --tech tags (default any)"
     )
     lp.add_argument(
+        "--board",
+        "--source",
         "--country",
+        dest="country",
         action="append",
         choices=registry.known_selectors(),
-        help="repeatable board selector — a country code selects every board "
-        "there ('ch' = swissdevjobs + jobs.ch + jobup.ch), a source id one "
-        "board ('jobsch'). Default: the boards enabled via SDJ_COUNTRIES",
+        help="repeatable board selector — a board id picks one board "
+        "('jobsch'), a country code every board there ('ch' = swissdevjobs "
+        "+ jobs.ch + jobup.ch). Default: the boards enabled via SDJ_BOARDS",
     )
     lp.add_argument(
         "--category",
@@ -797,7 +802,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     ap = sub.add_parser("auth", help="Open a board to resolve a Cloudflare challenge")
     ap.add_argument(
+        "--board",
+        "--source",
         "--country",
+        dest="country",
         default="ch",
         choices=registry.known_selectors(),
         help="which board to open (default: ch)",
@@ -856,10 +864,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="write a starter .env to the config directory",
     )
     cf.add_argument(
+        "--boards",
+        "--sources",
         "--countries",
+        dest="countries",
         metavar="LIST",
-        help="persist which boards to search, e.g. 'ch,de' or 'all' "
-        "(writes SDJ_COUNTRIES to the config .env)",
+        help="persist which boards to search — board ids and/or country "
+        "codes, e.g. 'jobsch', 'ch,de', or 'all' (writes SDJ_BOARDS to the "
+        "config .env)",
     )
     cf.add_argument("--json", action="store_true")
     cf.set_defaults(func=cmd_config)

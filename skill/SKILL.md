@@ -13,8 +13,8 @@ jobup.ch — every Swiss industry, ~50k postings, no salary data).
 **jobs.ch/jobup.ch are search-driven**: without a query they only return
 their newest postings, so always pass the user's actual search terms
 (`sdj list "<terms>"`), and add `--category it` to keep those two boards in
-tech. Board selectors take a country code (`--country ch` = all three Swiss
-boards) or one board id (`--country jobsch`). Their postings have **no
+tech. Board selectors take a board id (`--board jobsch`) or a country code
+(`--board ch` = all three Swiss boards). Their postings have **no
 native apply** — `direct-apply` answers `no_native_apply` with the real ATS
 URL; follow browser mode.
 

@@ -10,8 +10,8 @@ devitjobs.com (🇺🇸🇨🇦), devitjobs.nl (🇳🇱), devitjobs.fr (🇫�
 every posting publishes a salary range, so pay is a filter, not a guess.
 jobs.ch and jobup.ch (🇨🇭) cover **every** industry in Switzerland (~50k
 postings) but publish no salary data. All boards are searched by default;
-`country` on `search_jobs` takes a country code (`ch` = all three Swiss
-boards) or one board's id (`jobsch`), and salaries come back in each board's
+`board` on `search_jobs` takes a board id (`jobsch`) or a country code
+(`ch` = all three Swiss boards), and salaries come back in each board's
 own currency.
 
 **jobs.ch/jobup.ch are search-driven**: without a `query` they only return
@@ -24,7 +24,7 @@ platform, not a bug.
 
 | tool | use it for |
 |---|---|
-| `search_jobs` | filter by salary, stack, city, country, remote, seniority, visa |
+| `search_jobs` | filter by salary, stack, city, board, remote, seniority, visa |
 | `get_job` | the full posting before you write anything |
 | `apply_to_job` | submit through the site's own form — **gated, see below** |
 | `list_applications` | what has already been sent |

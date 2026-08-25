@@ -276,11 +276,15 @@ def test_config_countries_rejects_unknown_codes(runtime, capsys):
     assert "unknown board selector" in capsys.readouterr().err
 
 
-def test_config_countries_persists(runtime, tmp_path, monkeypatch, capsys):
+def test_config_boards_persists_and_countries_stays_an_alias(
+    runtime, tmp_path, monkeypatch, capsys
+):
     monkeypatch.setenv("SDJ_CONFIG_DIR", str(tmp_path))
+    assert run(runtime, "config", "--boards", "jobsch,de") == 0
+    assert "Wrote SDJ_BOARDS=jobsch,de" in capsys.readouterr().out
+    assert "SDJ_BOARDS=jobsch,de" in (tmp_path / ".env").read_text()
     assert run(runtime, "config", "--countries", "ch,de") == 0
-    assert "Wrote SDJ_COUNTRIES=ch,de" in capsys.readouterr().out
-    assert "SDJ_COUNTRIES=ch,de" in (tmp_path / ".env").read_text()
+    assert "SDJ_BOARDS=ch,de" in (tmp_path / ".env").read_text()
 
 
 def test_country_flag_narrows_the_boards(fresh_uow, capsys):
