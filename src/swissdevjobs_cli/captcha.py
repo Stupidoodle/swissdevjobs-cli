@@ -8,6 +8,7 @@ browser, let them solve the challenge interactively, then paste the resulting
 `cf_clearance` cookie back into the terminal. The cookie is persisted to the
 Netscape-format jar in api.COOKIE_FILE so subsequent requests carry it.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -41,7 +42,7 @@ def _store_clearance(value: str, domain: str = ".swissdevjobs.ch") -> None:
             discard=False,
             comment=None,
             comment_url=None,
-            rest={"HttpOnly": None, "SameSite": "None"},
+            rest={"HttpOnly": "", "SameSite": "None"},
             rfc2109=False,
         )
     )

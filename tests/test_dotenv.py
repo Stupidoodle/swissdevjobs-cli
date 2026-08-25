@@ -1,3 +1,5 @@
+"""Offline tests for dotenv."""
+
 from __future__ import annotations
 
 import os
@@ -7,16 +9,18 @@ from swissdevjobs_cli import dotenv
 
 def test_parse_handles_the_shapes_a_real_env_file_uses():
     parsed = dotenv.parse(
-        "\n".join([
-            "# a comment",
-            "",
-            'SDJ_NAME="Ada Lovelace"',
-            "export SDJ_EMAIL=ada@example.com",
-            "SDJ_CV='/tmp/cv.pdf'",
-            "SDJ_CACHE_DIR=/tmp/cache   # trailing comment",
-            "not a pair",
-            "SDJ_MULTI=\"line one\\nline two\"",
-        ])
+        "\n".join(
+            [
+                "# a comment",
+                "",
+                'SDJ_NAME="Ada Lovelace"',
+                "export SDJ_EMAIL=ada@example.com",
+                "SDJ_CV='/tmp/cv.pdf'",
+                "SDJ_CACHE_DIR=/tmp/cache   # trailing comment",
+                "not a pair",
+                'SDJ_MULTI="line one\\nline two"',
+            ]
+        )
     )
     assert parsed["SDJ_NAME"] == "Ada Lovelace"
     assert parsed["SDJ_EMAIL"] == "ada@example.com"

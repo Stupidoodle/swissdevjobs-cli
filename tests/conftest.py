@@ -6,6 +6,7 @@ before the package is imported anywhere. Setting it here at conftest module
 scope is what guarantees that — a fixture would run far too late and the suite
 would read and write the developer's real application database.
 """
+
 from __future__ import annotations
 
 import os

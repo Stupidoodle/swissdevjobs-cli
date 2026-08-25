@@ -1,4 +1,5 @@
 """Job filtering and ranking helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -36,7 +37,12 @@ def matches(
 
     if location:
         loc = location.lower()
-        if loc not in (job.get("cityCategory", "") + " " + job.get("actualCity", "")).lower():
+        if (
+            loc
+            not in (
+                job.get("cityCategory", "") + " " + job.get("actualCity", "")
+            ).lower()
+        ):
             return False
 
     if remote is True and job.get("workplace") not in ("remote", "hybrid"):
@@ -63,10 +69,14 @@ def matches(
 
     if query:
         q = query.lower()
-        hay = " ".join(
-            str(job.get(k, "") or "")
-            for k in ("name", "company", "actualCity", "techCategory")
-        ) + " " + " ".join(tags)
+        hay = (
+            " ".join(
+                str(job.get(k, "") or "")
+                for k in ("name", "company", "actualCity", "techCategory")
+            )
+            + " "
+            + " ".join(tags)
+        )
         if q not in hay.lower():
             return False
 
@@ -106,6 +116,7 @@ def _iso_to_epoch(iso: str) -> int:
     if not iso:
         return 0
     from datetime import datetime
+
     try:
         # Strip trailing 'Z' or timezone offset; MongoDB-style strings vary.
         s = iso.replace("Z", "+00:00")

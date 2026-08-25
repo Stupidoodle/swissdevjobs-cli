@@ -12,6 +12,7 @@ Two rules matter here:
    a refusal unless the caller passes confirm=true. That gives the human on
    the other side of the model a place to say no.
 """
+
 from __future__ import annotations
 
 import json
@@ -71,11 +72,21 @@ def tool_search_jobs(
 ) -> dict[str, Any]:
     jobs = api.list_jobs()
     hits = [
-        j for j in jobs
+        j
+        for j in jobs
         if matches(
-            j, tech=tech, tech_any=not tech_all, location=location, remote=remote,
-            visa=visa, level=level, min_salary=min_salary, max_salary=max_salary,
-            language=language, query=query, company=company,
+            j,
+            tech=tech,
+            tech_any=not tech_all,
+            location=location,
+            remote=remote,
+            visa=visa,
+            level=level,
+            min_salary=min_salary,
+            max_salary=max_salary,
+            language=language,
+            query=query,
+            company=company,
         )
     ]
     hits.sort(key=lambda j: sort_key(j, by=sort))
@@ -142,17 +153,23 @@ def tool_apply_to_job(
     email = email or os.environ.get("SDJ_EMAIL")
     cv_path = cv_path or os.environ.get("SDJ_CV") or ""
     missing = [
-        label for label, value in
-        (("name/$SDJ_NAME", name), ("email/$SDJ_EMAIL", email), ("cv_path/$SDJ_CV", cv_path))
+        label
+        for label, value in (
+            ("name/$SDJ_NAME", name),
+            ("email/$SDJ_EMAIL", email),
+            ("cv_path/$SDJ_CV", cv_path),
+        )
         if not value
     ]
-    if missing:
+    if missing or not name or not email:
         return {"error": "missing_identity", "missing": missing}
     if not Path(cv_path).is_file():
         return {"error": "cv_not_found", "cv_path": cv_path}
     if "<" in motivation or ">" in motivation:
-        return {"error": "invalid_motivation",
-                "message": "The site rejects < and > in the motivation letter."}
+        return {
+            "error": "invalid_motivation",
+            "message": "The site rejects < and > in the motivation letter.",
+        }
 
     # Irreversible: make the model surface it to a human before it happens.
     if not confirm:
@@ -176,17 +193,28 @@ def tool_apply_to_job(
         }
 
     result = api.direct_apply(
-        detail, name=name, email=email, motivation=motivation, cv_path=cv_path,
-        is_from_europe=is_from_europe, lang_skills=lang_skills,
+        detail,
+        name=name,
+        email=email,
+        motivation=motivation,
+        cv_path=cv_path,
+        is_from_europe=is_from_europe,
+        lang_skills=lang_skills,
     )
     application = None
     if result["status"] == 200:
         application = db.mark_applied(
-            job_id=detail["_id"], company=detail.get("company", ""),
-            role=detail.get("name", ""), method="direct",
+            job_id=detail["_id"],
+            company=detail.get("company", ""),
+            role=detail.get("name", ""),
+            method="direct",
         )
-    return {"submitted": result["status"] == 200, "http_status": result["status"],
-            "response": result.get("response", "")[:500], "application": application}
+    return {
+        "submitted": result["status"] == 200,
+        "http_status": result["status"],
+        "response": result.get("response", "")[:500],
+        "application": application,
+    }
 
 
 def tool_list_applications(limit: int = 100) -> dict[str, Any]:
@@ -194,15 +222,20 @@ def tool_list_applications(limit: int = 100) -> dict[str, Any]:
     return {"count": len(apps), "applications": apps}
 
 
-def tool_mark_applied(job_id: str, method: str, notes: str | None = None) -> dict[str, Any]:
+def tool_mark_applied(
+    job_id: str, method: str, notes: str | None = None
+) -> dict[str, Any]:
     jobs = api.list_jobs()
     job = api.resolve_id(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
     detail = api.get_job(job["_id"])
     return db.mark_applied(
-        job_id=detail["_id"], company=detail.get("company", ""),
-        role=detail.get("name", ""), method=method, notes=notes,
+        job_id=detail["_id"],
+        company=detail.get("company", ""),
+        role=detail.get("name", ""),
+        method=method,
+        notes=notes,
     )
 
 
@@ -213,7 +246,11 @@ def tool_top_technologies(limit: int = 25) -> dict[str, Any]:
     for job in api.list_jobs():
         for tag in job.get("filterTags") or []:
             counter[tag] += 1
-    return {"technologies": [{"name": n, "postings": c} for n, c in counter.most_common(limit)]}
+    return {
+        "technologies": [
+            {"name": n, "postings": c} for n, c in counter.most_common(limit)
+        ]
+    }
 
 
 # --- tool registry ----------------------------------------------------------
@@ -234,26 +271,47 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {**_STR, "description": "free text over title, company, city, tags"},
-                "tech": {"type": "array", "items": _STR,
-                         "description": "technology tags, e.g. ['Python', 'Kubernetes']"},
-                "tech_all": {**_BOOL, "description": "require every tag (default: any)"},
+                "query": {
+                    **_STR,
+                    "description": "free text over title, company, city, tags",
+                },
+                "tech": {
+                    "type": "array",
+                    "items": _STR,
+                    "description": "technology tags, e.g. ['Python', 'Kubernetes']",
+                },
+                "tech_all": {
+                    **_BOOL,
+                    "description": "require every tag (default: any)",
+                },
                 "location": {**_STR, "description": "city substring, e.g. 'Zurich'"},
                 "remote": {**_BOOL, "description": "true = remote or hybrid only"},
                 "visa": {**_BOOL, "description": "true = visa sponsorship only"},
-                "level": {**_STR, "enum": ["Junior", "Regular", "Senior", "Principal", "CLevel"]},
+                "level": {
+                    **_STR,
+                    "enum": ["Junior", "Regular", "Senior", "Principal", "CLevel"],
+                },
                 "language": {**_STR, "description": "posting language, e.g. 'English'"},
                 "company": {**_STR, "description": "company name substring"},
                 "min_salary": {**_INT, "description": "CHF per year"},
                 "max_salary": {**_INT, "description": "CHF per year"},
-                "sort": {**_STR, "enum": ["posted", "date", "salary", "company"],
-                         "description": "posted = true creation time (default)"},
+                "sort": {
+                    **_STR,
+                    "enum": ["posted", "date", "salary", "company"],
+                    "description": "posted = true creation time (default)",
+                },
                 "limit": {**_INT, "description": "max rows, 1-100 (default 25)"},
-                "include_applied": {**_BOOL, "description": "show jobs already applied to"},
+                "include_applied": {
+                    **_BOOL,
+                    "description": "show jobs already applied to",
+                },
             },
         },
-        "annotations": {"title": "Search Swiss dev jobs", "readOnlyHint": True,
-                        "openWorldHint": True},
+        "annotations": {
+            "title": "Search Swiss dev jobs",
+            "readOnlyHint": True,
+            "openWorldHint": True,
+        },
         "handler": tool_search_jobs,
     },
     {
@@ -265,11 +323,16 @@ TOOLS: list[dict[str, Any]] = [
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {"job_id": {**_STR, "description": "job id, URL slug, or substring"}},
+            "properties": {
+                "job_id": {**_STR, "description": "job id, URL slug, or substring"}
+            },
             "required": ["job_id"],
         },
-        "annotations": {"title": "Read a full posting", "readOnlyHint": True,
-                        "openWorldHint": True},
+        "annotations": {
+            "title": "Read a full posting",
+            "readOnlyHint": True,
+            "openWorldHint": True,
+        },
         "handler": tool_get_job,
     },
     {
@@ -286,21 +349,39 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "job_id": {**_STR, "description": "job id, URL slug, or substring"},
-                "motivation": {**_STR, "description": "cover letter text; < and > are rejected"},
+                "motivation": {
+                    **_STR,
+                    "description": "cover letter text; < and > are rejected",
+                },
                 "cv_path": {**_STR, "description": "absolute path to a PDF CV"},
-                "confirm": {**_BOOL,
-                            "description": "must be true to actually submit; the user has to agree first"},
+                "confirm": {
+                    **_BOOL,
+                    "description": "must be true to actually submit; the user has to agree first",
+                },
                 "name": {**_STR, "description": "applicant name (default: $SDJ_NAME)"},
-                "email": {**_STR, "description": "applicant email (default: $SDJ_EMAIL)"},
+                "email": {
+                    **_STR,
+                    "description": "applicant email (default: $SDJ_EMAIL)",
+                },
                 "lang_skills": {**_STR, "enum": ["native", "fluent", "good", "basic"]},
-                "is_from_europe": {**_BOOL, "description": "EU/EEA/CH based (default true)"},
-                "force": {**_BOOL, "description": "override duplicate and deliverability refusals"},
+                "is_from_europe": {
+                    **_BOOL,
+                    "description": "EU/EEA/CH based (default true)",
+                },
+                "force": {
+                    **_BOOL,
+                    "description": "override duplicate and deliverability refusals",
+                },
             },
             "required": ["job_id", "motivation", "cv_path"],
         },
-        "annotations": {"title": "Submit an application", "readOnlyHint": False,
-                        "destructiveHint": False, "idempotentHint": False,
-                        "openWorldHint": True},
+        "annotations": {
+            "title": "Submit an application",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
         "handler": tool_apply_to_job,
     },
     {
@@ -311,8 +392,11 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {"limit": {**_INT, "description": "max rows (default 100)"}},
         },
-        "annotations": {"title": "List tracked applications", "readOnlyHint": True,
-                        "openWorldHint": False},
+        "annotations": {
+            "title": "List tracked applications",
+            "readOnlyHint": True,
+            "openWorldHint": False,
+        },
         "handler": tool_list_applications,
     },
     {
@@ -331,8 +415,13 @@ TOOLS: list[dict[str, Any]] = [
             },
             "required": ["job_id", "method"],
         },
-        "annotations": {"title": "Record an application made elsewhere", "readOnlyHint": False,
-                        "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+        "annotations": {
+            "title": "Record an application made elsewhere",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
         "handler": tool_mark_applied,
     },
     {
@@ -341,10 +430,15 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Which technologies appear most often across current postings.",
         "inputSchema": {
             "type": "object",
-            "properties": {"limit": {**_INT, "description": "how many tags (default 25)"}},
+            "properties": {
+                "limit": {**_INT, "description": "how many tags (default 25)"}
+            },
         },
-        "annotations": {"title": "Most-requested technologies", "readOnlyHint": True,
-                        "openWorldHint": True},
+        "annotations": {
+            "title": "Most-requested technologies",
+            "readOnlyHint": True,
+            "openWorldHint": True,
+        },
         "handler": tool_top_technologies,
     },
 ]
@@ -361,11 +455,19 @@ def _result(request_id: Any, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    }
 
 
 def _content(payload: Any, is_error: bool = False) -> dict[str, Any]:
-    text = payload if isinstance(payload, str) else json.dumps(payload, indent=2, ensure_ascii=False)
+    text = (
+        payload
+        if isinstance(payload, str)
+        else json.dumps(payload, indent=2, ensure_ascii=False)
+    )
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
@@ -376,17 +478,20 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
     params = message.get("params") or {}
 
     if method == "initialize":
-        return _result(request_id, {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": SERVER_NAME, "version": _version()},
-            "instructions": (
-                "Search and apply to Swiss developer jobs. Every posting carries a "
-                "published salary range. Applying is irreversible: call apply_to_job "
-                "without confirm first, show the user what would be sent, and only "
-                "re-call with confirm=true once they have agreed."
-            ),
-        })
+        return _result(
+            request_id,
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": SERVER_NAME, "version": _version()},
+                "instructions": (
+                    "Search and apply to Swiss developer jobs. Every posting carries a "
+                    "published salary range. Applying is irreversible: call apply_to_job "
+                    "without confirm first, show the user what would be sent, and only "
+                    "re-call with confirm=true once they have agreed."
+                ),
+            },
+        )
 
     # Notifications carry no id and expect no response.
     if request_id is None:
@@ -401,22 +506,34 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
         if handler is None:
             return _error(request_id, -32602, f"Unknown tool: {name}")
         try:
-            return _result(request_id, _content(handler(**(params.get("arguments") or {}))))
+            return _result(
+                request_id, _content(handler(**(params.get("arguments") or {})))
+            )
         except api.CaptchaRequired as e:
-            return _result(request_id, _content({
-                "error": "cloudflare_challenge",
-                "message": (
-                    "swissdevjobs.ch returned a Cloudflare challenge. The user needs to "
-                    f"run `sdj auth` in a terminal and clear it at {e.url}."
+            return _result(
+                request_id,
+                _content(
+                    {
+                        "error": "cloudflare_challenge",
+                        "message": (
+                            "swissdevjobs.ch returned a Cloudflare challenge. The user needs to "
+                            f"run `sdj auth` in a terminal and clear it at {e.url}."
+                        ),
+                    },
+                    is_error=True,
                 ),
-            }, is_error=True))
+            )
         except TypeError as e:
-            return _result(request_id, _content({"error": "bad_arguments", "message": str(e)},
-                                                is_error=True))
+            return _result(
+                request_id,
+                _content({"error": "bad_arguments", "message": str(e)}, is_error=True),
+            )
         except Exception as e:
             _log(f"tool {name} failed: {traceback.format_exc()}")
-            return _result(request_id, _content({"error": type(e).__name__, "message": str(e)},
-                                                is_error=True))
+            return _result(
+                request_id,
+                _content({"error": type(e).__name__, "message": str(e)}, is_error=True),
+            )
 
     if method in ("resources/list", "prompts/list"):
         return _result(request_id, {"resources": [], "prompts": []})
@@ -446,7 +563,11 @@ def serve(stdin=None, stdout=None) -> int:
         try:
             message = json.loads(line)
         except json.JSONDecodeError as e:
-            print(json.dumps(_error(None, -32700, f"Parse error: {e}")), file=stdout, flush=True)
+            print(
+                json.dumps(_error(None, -32700, f"Parse error: {e}")),
+                file=stdout,
+                flush=True,
+            )
             continue
 
         response = handle_request(message)

@@ -5,6 +5,7 @@ speaks JSON-RPC on stdout, so any stray print would corrupt its transport.
 Both front ends build their output from these helpers so the two can't
 drift apart.
 """
+
 from __future__ import annotations
 
 import re

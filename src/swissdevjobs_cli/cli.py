@@ -1,4 +1,5 @@
 """Command-line interface for swissdevjobs.ch."""
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +47,8 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     jobs = with_retry(api.list_jobs, force=args.refresh)
     filtered = [
-        j for j in jobs
+        j
+        for j in jobs
         if matches(
             j,
             tech=args.tech,
@@ -92,15 +94,21 @@ def cmd_list(args: argparse.Namespace) -> int:
     if args.json:
         if page_info:
             page, total_pages, per = page_info
-            print(json.dumps({
-                "total_in_feed": len(jobs),
-                "total_after_filters": total_after_filters,
-                "hidden_already_applied": hide_count,
-                "page": page,
-                "per_page": per,
-                "total_pages": total_pages,
-                "jobs": filtered,
-            }, indent=2, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {
+                        "total_in_feed": len(jobs),
+                        "total_after_filters": total_after_filters,
+                        "hidden_already_applied": hide_count,
+                        "page": page,
+                        "per_page": per,
+                        "total_pages": total_pages,
+                        "jobs": filtered,
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
         else:
             # Backward-compatible flat list when no pagination requested.
             print(json.dumps(filtered, indent=2, ensure_ascii=False))
@@ -136,20 +144,28 @@ def cmd_show(args: argparse.Namespace) -> int:
         return 0
 
     print(f"# {detail.get('name')}  @  {detail.get('company')}")
-    print(f"Location:   {detail.get('actualCity')} ({detail.get('cityCategory')})  "
-          f"workplace={detail.get('workplace')}  visa={detail.get('hasVisaSponsorship')}")
-    print(f"Level:      {detail.get('expLevel')}   Language: {detail.get('language')}   "
-          f"Type: {detail.get('jobType')}")
+    print(
+        f"Location:   {detail.get('actualCity')} ({detail.get('cityCategory')})  "
+        f"workplace={detail.get('workplace')}  visa={detail.get('hasVisaSponsorship')}"
+    )
+    print(
+        f"Level:      {detail.get('expLevel')}   Language: {detail.get('language')}   "
+        f"Type: {detail.get('jobType')}"
+    )
     print(f"Salary:     {fmt_salary(detail)}")
     print(f"Tech:       {', '.join(detail.get('technologies') or [])}")
     print(f"URL:        {api.job_url(detail.get('jobUrl', ''))}")
-    print(f"Contact:    {detail.get('candidateContactWay')}  "
-          f"{detail.get('emailAddressForApplications') or detail.get('redirectJobUrl') or ''}")
+    print(
+        f"Contact:    {detail.get('candidateContactWay')}  "
+        f"{detail.get('emailAddressForApplications') or detail.get('redirectJobUrl') or ''}"
+    )
     print()
-    for label, key in (("Description", "description"),
-                       ("Responsibilities", "responsibilitiesTextArea"),
-                       ("Must-have", "requirementsMustTextArea"),
-                       ("Nice-to-have", "requirementsNiceTextArea")):
+    for label, key in (
+        ("Description", "description"),
+        ("Responsibilities", "responsibilitiesTextArea"),
+        ("Must-have", "requirementsMustTextArea"),
+        ("Nice-to-have", "requirementsNiceTextArea"),
+    ):
         val = detail.get(key)
         if val:
             print(f"## {label}")
@@ -232,11 +248,17 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     print(f"Apply mode: DIRECT  (fallback: {fallback.upper()})")
     if existing:
-        print(f"STATUS:     Already applied on {existing['applied_at']} via {existing['method']}")
+        print(
+            f"STATUS:     Already applied on {existing['applied_at']} via {existing['method']}"
+        )
     print(f"Posting:    {posting_url}")
-    print(f"Role:       {payload['title']} @ {payload['company']} ({payload['location']})")
+    print(
+        f"Role:       {payload['title']} @ {payload['company']} ({payload['location']})"
+    )
     print(f"Salary:     {payload['salary']}   Language: {payload['language']}")
-    print(f"Workflow:   sdj direct-apply {d['_id']} --cv <cv.pdf> --motivation <text|path>")
+    print(
+        f"Workflow:   sdj direct-apply {d['_id']} --cv <cv.pdf> --motivation <text|path>"
+    )
     if fallback == "email":
         print(f"Fallback:   email to {email}")
     elif fallback == "browser":
@@ -254,6 +276,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 def cmd_tech(args: argparse.Namespace) -> int:
     jobs = with_retry(api.list_jobs)
     from collections import Counter
+
     c: Counter[str] = Counter()
     for j in jobs:
         for t in j.get("filterTags") or []:
@@ -270,6 +293,7 @@ def cmd_tech(args: argparse.Namespace) -> int:
 def cmd_auth(args: argparse.Namespace) -> int:
     """Proactively open the site so the user can clear a Cloudflare challenge."""
     from .captcha import interactive_unblock
+
     ok = interactive_unblock(api.BASE + "/")
     return 0 if ok else 1
 
@@ -313,8 +337,12 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print(json.dumps(stats, indent=2))
         return 0
 
-    print(f"Jobs cached:     {stats['jobs_cached']} (light), {stats['jobs_with_detail']} (detail)")
-    print(f"Applications:    {stats['applications_total']} total ({stats['applications_submitted']} submitted)")
+    print(
+        f"Jobs cached:     {stats['jobs_cached']} (light), {stats['jobs_with_detail']} (detail)"
+    )
+    print(
+        f"Applications:    {stats['applications_total']} total ({stats['applications_submitted']} submitted)"
+    )
     print(f"Database:        {stats['db_path']}")
     return 0
 
@@ -335,9 +363,11 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
 
     missing = [
         flag
-        for flag, value in (("--name/$SDJ_NAME", args.name),
-                            ("--email/$SDJ_EMAIL", args.email),
-                            ("--cv/$SDJ_CV", args.cv))
+        for flag, value in (
+            ("--name/$SDJ_NAME", args.name),
+            ("--email/$SDJ_EMAIL", args.email),
+            ("--cv/$SDJ_CV", args.cv),
+        )
         if not value
     ]
     if missing:
@@ -362,7 +392,9 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
     existing = db.is_applied(job["_id"])
     if existing and not args.force:
         if args.json:
-            print(json.dumps({"already_applied": True, "application": existing}, indent=2))
+            print(
+                json.dumps({"already_applied": True, "application": existing}, indent=2)
+            )
             return 0  # Success exit - agent handles this
         print(f"Already applied on {existing['applied_at']} via {existing['method']}")
         print("Use --force to apply again.")
@@ -404,12 +436,17 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
 
     # Validate no HTML in motivation (site rejects < and >)
     if "<" in motivation or ">" in motivation:
-        print("Error: motivation letter must not contain < or > characters", file=sys.stderr)
+        print(
+            "Error: motivation letter must not contain < or > characters",
+            file=sys.stderr,
+        )
         return 1
 
     if not args.json:
         print("Submitting direct application to SwissDevJobs...")
-        print(f"  Role:    {d.get('name')} @ {d.get('company')} ({d.get('actualCity')})")
+        print(
+            f"  Role:    {d.get('name')} @ {d.get('company')} ({d.get('actualCity')})"
+        )
         print(f"  Salary:  {fmt_salary(d)}")
         print(f"  CV:      {args.cv}")
         print(f"  Name:    {args.name}")
@@ -508,13 +545,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     lp = sub.add_parser("list", help="Search & list jobs")
     lp.add_argument("query", nargs="?", help="free-text search")
-    lp.add_argument("--tech", action="append", default=[], help="repeatable, e.g. --tech Python --tech Kubernetes")
-    lp.add_argument("--tech-all", action="store_true", help="require ALL --tech tags (default any)")
+    lp.add_argument(
+        "--tech",
+        action="append",
+        default=[],
+        help="repeatable, e.g. --tech Python --tech Kubernetes",
+    )
+    lp.add_argument(
+        "--tech-all", action="store_true", help="require ALL --tech tags (default any)"
+    )
     lp.add_argument("--location", help="city substring, e.g. Zurich")
     lp.add_argument("--remote", action="store_true", help="remote or hybrid only")
     lp.add_argument("--onsite", action="store_true", help="exclude remote")
     lp.add_argument("--visa", action="store_true", help="visa sponsorship only")
-    lp.add_argument("--level", choices=["Junior", "Regular", "Senior", "Principal", "CLevel"])
+    lp.add_argument(
+        "--level", choices=["Junior", "Regular", "Senior", "Principal", "CLevel"]
+    )
     lp.add_argument("--language", help="e.g. English, German")
     lp.add_argument("--company")
     lp.add_argument("--min-salary", type=int)
@@ -524,18 +570,33 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["salary", "date", "posted", "company"],
         default="posted",
         help="salary=highest, date=newest activeFrom (re-bump-aware), "
-             "posted=true creation time from ObjectId, company=A-Z. Default: posted.",
+        "posted=true creation time from ObjectId, company=A-Z. Default: posted.",
     )
-    lp.add_argument("--limit", type=int, default=0,
-                    help="cap output length (0 = no cap, default). Use --page/--per-page for windowed views.")
-    lp.add_argument("--page", type=int, default=1,
-                    help="1-indexed page number. Combine with --per-page (default page size 50).")
-    lp.add_argument("--per-page", type=int, default=50,
-                    help="page size when --page is used (default 50).")
+    lp.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="cap output length (0 = no cap, default). Use --page/--per-page for windowed views.",
+    )
+    lp.add_argument(
+        "--page",
+        type=int,
+        default=1,
+        help="1-indexed page number. Combine with --per-page (default page size 50).",
+    )
+    lp.add_argument(
+        "--per-page",
+        type=int,
+        default=50,
+        help="page size when --page is used (default 50).",
+    )
     lp.add_argument("--json", action="store_true")
     lp.add_argument("--refresh", action="store_true", help="bypass cache")
-    lp.add_argument("--include-applied", action="store_true",
-                    help="show jobs you've already applied to (hidden by default)")
+    lp.add_argument(
+        "--include-applied",
+        action="store_true",
+        help="show jobs you've already applied to (hidden by default)",
+    )
     lp.set_defaults(func=cmd_list)
 
     sp = sub.add_parser("show", help="Show full job details")
@@ -553,13 +614,22 @@ def build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--json", action="store_true")
     tp.set_defaults(func=cmd_tech)
 
-    apl = sub.add_parser("apply", help="Surface apply mechanism (email / ATS URL / questions)")
+    apl = sub.add_parser(
+        "apply", help="Surface apply mechanism (email / ATS URL / questions)"
+    )
     apl.add_argument("id")
     apl.add_argument("--json", action="store_true")
-    apl.add_argument("--open", action="store_true", help="also open the apply URL in a browser")
-    apl.add_argument("--complete", choices=["email", "browser", "linkedin"],
-                     help="mark job as applied via this method")
-    apl.add_argument("--notes", default=None, help="notes to store with the application")
+    apl.add_argument(
+        "--open", action="store_true", help="also open the apply URL in a browser"
+    )
+    apl.add_argument(
+        "--complete",
+        choices=["email", "browser", "linkedin"],
+        help="mark job as applied via this method",
+    )
+    apl.add_argument(
+        "--notes", default=None, help="notes to store with the application"
+    )
     apl.set_defaults(func=cmd_apply)
 
     ap = sub.add_parser("auth", help="Open the site to resolve a Cloudflare challenge")
@@ -570,23 +640,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="Submit via SwissDevJobs native form (POST /api/jobApply)",
     )
     da.add_argument("id", help="job _id, jobUrl slug, or substring")
-    da.add_argument("--name", default=os.environ.get("SDJ_NAME"),
-                    help="Applicant full name (default: $SDJ_NAME)")
-    da.add_argument("--email", default=os.environ.get("SDJ_EMAIL"),
-                    help="Applicant email address (default: $SDJ_EMAIL)")
-    da.add_argument("--cv", default=os.environ.get("SDJ_CV"),
-                    help="Path to a PDF CV (default: $SDJ_CV)")
-    da.add_argument("--motivation", default="", help="Cover letter text or path to a .txt file")
-    da.add_argument("--not-eu", action="store_true", help="Set isFromEurope=No (default: Yes)")
+    da.add_argument(
+        "--name",
+        default=os.environ.get("SDJ_NAME"),
+        help="Applicant full name (default: $SDJ_NAME)",
+    )
+    da.add_argument(
+        "--email",
+        default=os.environ.get("SDJ_EMAIL"),
+        help="Applicant email address (default: $SDJ_EMAIL)",
+    )
+    da.add_argument(
+        "--cv",
+        default=os.environ.get("SDJ_CV"),
+        help="Path to a PDF CV (default: $SDJ_CV)",
+    )
+    da.add_argument(
+        "--motivation", default="", help="Cover letter text or path to a .txt file"
+    )
+    da.add_argument(
+        "--not-eu", action="store_true", help="Set isFromEurope=No (default: Yes)"
+    )
     da.add_argument(
         "--lang-skills",
         default="native",
         choices=["native", "fluent", "good", "basic"],
         help="Self-rated language skill in the posting's language (default: native). "
-             "Only sent when the posting has hasLangCheck=true.",
+        "Only sent when the posting has hasLangCheck=true.",
     )
     da.add_argument("--json", action="store_true")
-    da.add_argument("--force", action="store_true", help="apply even if already marked as applied")
+    da.add_argument(
+        "--force", action="store_true", help="apply even if already marked as applied"
+    )
     da.set_defaults(func=cmd_direct_apply)
 
     # applications command
@@ -596,8 +681,11 @@ def build_parser() -> argparse.ArgumentParser:
     apps.set_defaults(func=cmd_applications)
 
     cf = sub.add_parser("config", help="Show resolved config / create a .env")
-    cf.add_argument("--init", action="store_true",
-                    help="write a starter .env to the config directory")
+    cf.add_argument(
+        "--init",
+        action="store_true",
+        help="write a starter .env to the config directory",
+    )
     cf.add_argument("--json", action="store_true")
     cf.set_defaults(func=cmd_config)
 

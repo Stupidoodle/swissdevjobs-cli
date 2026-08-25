@@ -1,4 +1,5 @@
 """MCP server tests. No network: api and db are stubbed per test."""
+
 from __future__ import annotations
 
 import json
@@ -15,9 +16,14 @@ def stub(monkeypatch):
     sent = []
 
     monkeypatch.setattr(mcp.api, "list_jobs", lambda **kw: [job()])
-    monkeypatch.setattr(mcp.api, "get_job", lambda jid, **kw: job(
-        description="<p>Build things</p>", applyQuestions=[],
-    ))
+    monkeypatch.setattr(
+        mcp.api,
+        "get_job",
+        lambda jid, **kw: job(
+            description="<p>Build things</p>",
+            applyQuestions=[],
+        ),
+    )
     monkeypatch.setattr(mcp.db, "is_applied", lambda jid: None)
     monkeypatch.setattr(mcp.db, "is_job_applied", lambda j: False)
     monkeypatch.setattr(mcp.db, "mark_applied", lambda **kw: {"id": 1, **kw})
@@ -36,10 +42,14 @@ def call(tool, /, **arguments):
     `tool` is positional-only so it can't collide with a tool argument
     that is itself called `name`.
     """
-    response = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": tool, "arguments": arguments},
-    })
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments},
+        }
+    )
     return json.loads(response["result"]["content"][0]["text"])
 
 
@@ -47,18 +57,25 @@ def call(tool, /, **arguments):
 
 
 def test_initialize_reports_the_protocol_version():
-    result = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})["result"]
+    result = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})[
+        "result"
+    ]
     assert result["protocolVersion"] == mcp.PROTOCOL_VERSION
     assert result["serverInfo"]["name"] == "swissdevjobs"
     assert "tools" in result["capabilities"]
 
 
 def test_notifications_get_no_response():
-    assert mcp.handle_request({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+    assert (
+        mcp.handle_request({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        is None
+    )
 
 
 def test_tools_list_is_well_formed():
-    tools = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]
+    tools = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})[
+        "result"
+    ]["tools"]
     assert {t["name"] for t in tools} == set(mcp.HANDLERS)
     for tool in tools:
         assert tool["description"]
@@ -76,9 +93,14 @@ def test_only_the_write_tools_are_marked_mutating():
 
 
 def test_unknown_tool_is_a_protocol_error():
-    response = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nope"},
-    })
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "nope"},
+        }
+    )
     assert response["error"]["code"] == -32602
 
 
@@ -88,11 +110,17 @@ def test_unknown_method_is_a_protocol_error():
 
 
 def test_a_failing_tool_returns_an_error_result_not_a_crash(monkeypatch):
-    monkeypatch.setattr(mcp.api, "list_jobs", lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-    response = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": "search_jobs", "arguments": {}},
-    })
+    monkeypatch.setattr(
+        mcp.api, "list_jobs", lambda **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "search_jobs", "arguments": {}},
+        }
+    )
     assert response["result"]["isError"] is True
     assert "boom" in response["result"]["content"][0]["text"]
 
@@ -102,10 +130,14 @@ def test_a_cloudflare_challenge_tells_the_user_how_to_clear_it(monkeypatch):
         raise mcp.api.CaptchaRequired("https://swissdevjobs.ch/", 403, "")
 
     monkeypatch.setattr(mcp.api, "list_jobs", _blocked)
-    response = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": "search_jobs", "arguments": {}},
-    })
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "search_jobs", "arguments": {}},
+        }
+    )
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["error"] == "cloudflare_challenge"
     assert "sdj auth" in payload["message"]
@@ -140,10 +172,14 @@ def test_get_job_returns_the_full_payload(stub):
 
 def test_get_job_rejects_an_unknown_id(monkeypatch, stub):
     monkeypatch.setattr(mcp.api, "resolve_id", lambda jobs, q: None)
-    response = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": "get_job", "arguments": {"job_id": "nope"}},
-    })
+    response = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "get_job", "arguments": {"job_id": "nope"}},
+        }
+    )
     assert response["result"]["isError"] is True
 
 
@@ -153,8 +189,14 @@ def test_get_job_rejects_an_unknown_id(monkeypatch, stub):
 def test_applying_without_confirm_submits_nothing(stub, tmp_path):
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    result = call("apply_to_job", job_id="acme", motivation="Hello",
-                  cv_path=str(cv), name="Ada", email="ada@example.com")
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+    )
     assert result["error"] == "confirmation_required"
     assert result["would_submit"]["company"] == "Acme AG"
     assert result["would_submit"]["salary"] == "CHF 130'000–160'000"
@@ -164,8 +206,15 @@ def test_applying_without_confirm_submits_nothing(stub, tmp_path):
 def test_applying_with_confirm_submits(stub, tmp_path):
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    result = call("apply_to_job", job_id="acme", motivation="Hello", cv_path=str(cv),
-                  name="Ada", email="ada@example.com", confirm=True)
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+        confirm=True,
+    )
     assert result["submitted"] is True
     assert len(stub) == 1
     assert stub[0]["name"] == "Ada"
@@ -175,28 +224,55 @@ def test_a_duplicate_is_reported_before_the_gate(stub, monkeypatch, tmp_path):
     monkeypatch.setattr(mcp.db, "is_applied", lambda jid: {"id": 3, "method": "direct"})
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    result = call("apply_to_job", job_id="acme", motivation="Hello", cv_path=str(cv),
-                  confirm=True, name="Ada", email="ada@example.com")
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        confirm=True,
+        name="Ada",
+        email="ada@example.com",
+    )
     assert result["already_applied"] is True
     assert sent_nothing(stub)
 
 
-def test_an_undeliverable_posting_is_refused_even_with_confirm(stub, monkeypatch, tmp_path):
-    monkeypatch.setattr(mcp.api, "get_job", lambda jid, **kw: job(
-        candidateContactWay="CompanyWebsite", emailAddressForApplications=None,
-        redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
-    ))
+def test_an_undeliverable_posting_is_refused_even_with_confirm(
+    stub, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        mcp.api,
+        "get_job",
+        lambda jid, **kw: job(
+            candidateContactWay="CompanyWebsite",
+            emailAddressForApplications=None,
+            redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
+        ),
+    )
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    result = call("apply_to_job", job_id="acme", motivation="Hello", cv_path=str(cv),
-                  confirm=True, name="Ada", email="ada@example.com")
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path=str(cv),
+        confirm=True,
+        name="Ada",
+        email="ada@example.com",
+    )
     assert result["error"] == "company_website_posting"
     assert sent_nothing(stub)
 
 
 def test_a_missing_cv_is_caught_before_the_gate(stub):
-    result = call("apply_to_job", job_id="acme", motivation="Hello",
-                  cv_path="/nonexistent.pdf", name="Ada", email="ada@example.com")
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="Hello",
+        cv_path="/nonexistent.pdf",
+        name="Ada",
+        email="ada@example.com",
+    )
     assert result["error"] == "cv_not_found"
     assert sent_nothing(stub)
 
@@ -204,8 +280,14 @@ def test_a_missing_cv_is_caught_before_the_gate(stub):
 def test_angle_brackets_in_the_letter_are_rejected(stub, tmp_path):
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    result = call("apply_to_job", job_id="acme", motivation="a <b> c", cv_path=str(cv),
-                  name="Ada", email="ada@example.com")
+    result = call(
+        "apply_to_job",
+        job_id="acme",
+        motivation="a <b> c",
+        cv_path=str(cv),
+        name="Ada",
+        email="ada@example.com",
+    )
     assert result["error"] == "invalid_motivation"
     assert sent_nothing(stub)
 

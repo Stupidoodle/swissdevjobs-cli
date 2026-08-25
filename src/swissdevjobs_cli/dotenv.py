@@ -9,6 +9,7 @@ Search order:
   2. ./.env                   project-local, walking up to the filesystem root
   3. $SDJ_CONFIG_DIR/.env     defaults to ~/.config/swissdevjobs-cli/.env
 """
+
 from __future__ import annotations
 
 import os
@@ -42,7 +43,11 @@ def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
         inner = value[1:-1]
         # Only double quotes process escapes, matching POSIX shell behaviour.
-        return inner.replace("\\n", "\n").replace("\\t", "\t") if value[0] == '"' else inner
+        return (
+            inner.replace("\\n", "\n").replace("\\t", "\t")
+            if value[0] == '"'
+            else inner
+        )
     # Unquoted: an unescaped ` #` starts a trailing comment.
     head, sep, _ = value.partition(" #")
     return (head if sep else value).strip()
@@ -55,7 +60,7 @@ def parse(text: str) -> dict[str, str]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
-            line = line[len("export "):].lstrip()
+            line = line[len("export ") :].lstrip()
         key, sep, value = line.partition("=")
         key = key.strip()
         if not sep or not key or not key.replace("_", "").isalnum():

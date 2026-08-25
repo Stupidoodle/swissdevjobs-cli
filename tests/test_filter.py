@@ -1,3 +1,5 @@
+"""Offline tests for filter."""
+
 from __future__ import annotations
 
 from conftest import job
@@ -73,8 +75,12 @@ def test_sort_by_salary_puts_the_highest_first():
 
 
 def test_sort_by_posted_uses_the_id_not_the_rebump_date():
-    old_id_recently_bumped = job(_id="62eccd7a57370f0152e4950e", activeFrom="2026-08-24T00:00:00Z")
-    genuinely_new = job(_id="68b0000057370f0152e4950e", activeFrom="2026-01-01T00:00:00Z")
+    old_id_recently_bumped = job(
+        _id="62eccd7a57370f0152e4950e", activeFrom="2026-08-24T00:00:00Z"
+    )
+    genuinely_new = job(
+        _id="68b0000057370f0152e4950e", activeFrom="2026-01-01T00:00:00Z"
+    )
     jobs = [old_id_recently_bumped, genuinely_new]
     jobs.sort(key=lambda j: sort_key(j, by="posted"))
     assert jobs[0] is genuinely_new

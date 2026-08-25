@@ -1,3 +1,5 @@
+"""Offline tests for payloads."""
+
 from __future__ import annotations
 
 from conftest import job
@@ -24,12 +26,26 @@ def test_strip_html_turns_markup_into_readable_text():
 
 def test_fallback_mode_prefers_a_real_email_address():
     assert fallback_mode(job()) == "email"
-    assert fallback_mode(job(candidateContactWay="CompanyWebsite",
-                            emailAddressForApplications=None,
-                            redirectJobUrl="https://acme.example/apply")) == "browser"
-    assert fallback_mode(job(candidateContactWay=None,
-                            emailAddressForApplications=None,
-                            redirectJobUrl=None)) == "unknown"
+    assert (
+        fallback_mode(
+            job(
+                candidateContactWay="CompanyWebsite",
+                emailAddressForApplications=None,
+                redirectJobUrl="https://acme.example/apply",
+            )
+        )
+        == "browser"
+    )
+    assert (
+        fallback_mode(
+            job(
+                candidateContactWay=None,
+                emailAddressForApplications=None,
+                redirectJobUrl=None,
+            )
+        )
+        == "unknown"
+    )
 
 
 def test_a_forwardable_posting_is_not_refused():
@@ -51,18 +67,29 @@ def test_jometer_syndication_is_refused():
 
 
 def test_company_website_without_an_address_is_refused():
-    refusal = undeliverable(job(candidateContactWay="CompanyWebsite",
-                                emailAddressForApplications=None,
-                                redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x"))
+    refusal = undeliverable(
+        job(
+            candidateContactWay="CompanyWebsite",
+            emailAddressForApplications=None,
+            redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
+        )
+    )
     assert refusal["error"] == "company_website_posting"
     assert refusal["aggregator_host"] is None
 
 
 def test_company_website_that_still_has_an_address_is_deliverable():
     # SwissDevJobs can forward this one, so it must not be refused.
-    assert undeliverable(job(candidateContactWay="CompanyWebsite",
-                             emailAddressForApplications="jobs@acme.example",
-                             redirectJobUrl="https://acme.example/careers")) is None
+    assert (
+        undeliverable(
+            job(
+                candidateContactWay="CompanyWebsite",
+                emailAddressForApplications="jobs@acme.example",
+                redirectJobUrl="https://acme.example/careers",
+            )
+        )
+        is None
+    )
 
 
 def test_apply_payload_carries_what_a_caller_needs_to_act():

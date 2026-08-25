@@ -15,3 +15,9 @@ build/
 .idea/
 .vscode/
 .DS_Store
+
+# Coverage / typecheck caches
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/

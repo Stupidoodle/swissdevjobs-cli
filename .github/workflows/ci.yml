@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         # The floor and the ceiling of the supported range.
-        python-version: ["3.9", "3.13"]
+        python-version: ["3.9", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +26,13 @@ jobs:
         run: uv sync --locked --python ${{ matrix.python-version }}
 
       - name: Lint
-        run: uv run ruff check .
+        run: make lint
+
+      - name: Typecheck
+        run: make typecheck
 
       - name: Test
-        run: uv run pytest
+        run: make test
 
       - name: Verify the MCP server completes a handshake
         run: |

@@ -5,6 +5,7 @@ Agent-first design:
 - Deduplication returns data, not errors
 - All operations return dicts for JSON serialization
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -17,8 +18,12 @@ from pathlib import Path
 from typing import Any
 
 # Use same dirs as api.py
-CACHE_DIR = Path(os.environ.get("SDJ_CACHE_DIR", Path.home() / ".cache" / "swissdevjobs-cli"))
-CONFIG_DIR = Path(os.environ.get("SDJ_CONFIG_DIR", Path.home() / ".config" / "swissdevjobs-cli"))
+CACHE_DIR = Path(
+    os.environ.get("SDJ_CACHE_DIR", Path.home() / ".cache" / "swissdevjobs-cli")
+)
+CONFIG_DIR = Path(
+    os.environ.get("SDJ_CONFIG_DIR", Path.home() / ".config" / "swissdevjobs-cli")
+)
 DB_PATH = CACHE_DIR / "swissdevjobs.db"
 
 _conn: sqlite3.Connection | None = None
@@ -228,7 +233,9 @@ def import_markdown_log(path: Path) -> int:
             applied_at = None
             if timestamp:
                 with contextlib.suppress(Exception):
-                    applied_at = datetime.strptime(timestamp.strip(), "%Y-%m-%d").isoformat()
+                    applied_at = datetime.strptime(
+                        timestamp.strip(), "%Y-%m-%d"
+                    ).isoformat()
 
             # Insert (skip duplicates - check by company+role if no job_id)
             try:
@@ -275,7 +282,10 @@ def upsert_jobs_light(jobs: list[dict[str, Any]]) -> None:
         # Defensive: a re-listed posting can reuse the same job_url under a new _id,
         # which trips the UNIQUE(job_url) constraint. Wipe stale row first.
         if j.get("jobUrl") and j.get("_id"):
-            conn.execute("DELETE FROM jobs WHERE job_url = ? AND _id != ?", (j.get("jobUrl"), j.get("_id")))
+            conn.execute(
+                "DELETE FROM jobs WHERE job_url = ? AND _id != ?",
+                (j.get("jobUrl"), j.get("_id")),
+            )
         conn.execute(
             """INSERT INTO jobs (_id, job_url, company, name, actual_city, workplace,
                                  language, annual_salary_from, annual_salary_to,
@@ -357,7 +367,10 @@ def _row_to_job_dict(row: sqlite3.Row) -> dict[str, Any]:
     try:
         posted_at_unix = int(oid[:8], 16)
         from datetime import datetime, timezone
-        posted_at_iso = datetime.fromtimestamp(posted_at_unix, tz=timezone.utc).isoformat()
+
+        posted_at_iso = datetime.fromtimestamp(
+            posted_at_unix, tz=timezone.utc
+        ).isoformat()
     except (ValueError, TypeError):
         pass
     return {
@@ -396,7 +409,9 @@ def upsert_job_detail(job_id: str, detail: dict[str, Any]) -> None:
     conn.commit()
 
 
-def get_cached_detail(job_id: str, max_age_seconds: int = 3600) -> dict[str, Any] | None:
+def get_cached_detail(
+    job_id: str, max_age_seconds: int = 3600
+) -> dict[str, Any] | None:
     """Get cached job detail if fresh enough."""
     _ensure_db()
     conn = get_db()
@@ -424,9 +439,7 @@ def is_applied(job_id: str) -> dict[str, Any] | None:
     _ensure_db()
     conn = get_db()
 
-    cursor = conn.execute(
-        "SELECT * FROM applications WHERE job_id = ?", (job_id,)
-    )
+    cursor = conn.execute("SELECT * FROM applications WHERE job_id = ?", (job_id,))
     row = cursor.fetchone()
     if not row:
         return None
@@ -520,17 +533,19 @@ def list_applications(limit: int = 100) -> list[dict[str, Any]]:
 
     apps = []
     for row in cursor.fetchall():
-        apps.append({
-            "id": row["id"],
-            "job_id": row["job_id"],
-            "company": row["company"],
-            "role": row["role"],
-            "method": row["method"],
-            "status": row["status"],
-            "source": row["source"],
-            "applied_at": row["applied_at"],
-            "notes": row["notes"],
-        })
+        apps.append(
+            {
+                "id": row["id"],
+                "job_id": row["job_id"],
+                "company": row["company"],
+                "role": row["role"],
+                "method": row["method"],
+                "status": row["status"],
+                "source": row["source"],
+                "applied_at": row["applied_at"],
+                "notes": row["notes"],
+            }
+        )
     return apps
 
 
@@ -564,7 +579,9 @@ def is_job_applied(job: dict) -> bool:
     company = (job.get("company") or "").lower()
     role = (job.get("name") or "").lower()
     if company and role:
-        existing = is_applied_by_company_role(job.get("company", ""), job.get("name", ""))
+        existing = is_applied_by_company_role(
+            job.get("company", ""), job.get("name", "")
+        )
         if existing:
             return True
 

@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "swissdevjobs-cli"
 version = "0.3.0"
@@ -19,12 +15,6 @@ classifiers = [
 ]
 dependencies = []
 
-[dependency-groups]
-dev = [
-    "pytest>=7.0",
-    "ruff>=0.6",
-]
-
 [project.urls]
 Homepage = "https://github.com/Stupidoodle/swissdevjobs-cli"
 Issues = "https://github.com/Stupidoodle/swissdevjobs-cli/issues"
@@ -34,33 +24,68 @@ swissdevjobs = "swissdevjobs_cli.cli:main"
 sdj = "swissdevjobs_cli.cli:main"
 swissdevjobs-mcp = "swissdevjobs_cli.mcp:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[build-system]
+requires = ["uv_build>=0.10.8,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.13; python_version >= '3.10'",
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.15",
+    "ty>=0.0.73",
+]
 
 [tool.ruff]
-line-length = 100
+line-length = 88
 target-version = "py39"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "F",    # pyflakes
-    "W",    # pycodestyle warnings
-    "I",    # isort
-    "UP",   # pyupgrade
-    "B",    # bugbear
-    "SIM",  # simplify
-    "RUF",  # ruff-specific
+# COM812 dropped deliberately: it conflicts with `ruff format`.
+select = ["E", "F", "C", "D", "B", "I", "Q", "UP", "ASYNC", "TID", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S108", "D101", "D102", "D103", "D104", "D105", "D107"]
+# Legacy modules pending the cosmic-python restructure; these ignores are
+# removed in the refactor commit, where every file is rewritten in place.
+"src/swissdevjobs_cli/{api,captcha,cli,db,dotenv,filter,mcp,payloads,__main__}.py" = [
+    "D", "S", "C901", "E501",
 ]
-ignore = [
-    "E501",    # long lines are handled by the formatter, not the linter
-    "UP006",   # PEP 585 generics need 3.9+ at runtime; we rely on __future__ annotations
-    "UP007",   # same, for X | Y
-    "UP045",   # same, for X | None
-    "RUF001",  # en dashes in salary ranges and prose are deliberate
-]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+
+[tool.ruff.lint.isort]
+known-first-party = ["swissdevjobs_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "integration: touches a real SQLite file outside the sandbox fixtures",
+    "live: hits the REAL job boards read-only; skipped unless SDJ_LIVE=1",
+]
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+    "error::ResourceWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/swissdevjobs_cli"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+    "^\\s*\\.\\.\\.$",
+    "class .*\\(Protocol\\):",
+]

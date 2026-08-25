@@ -10,6 +10,7 @@ Jobs are served through Cloudflare; under heavy load or automated patterns CF ma
 return a JS challenge ("Just a moment...") or a managed-challenge interstitial.
 We detect those responses and surface them to the captcha handler.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -17,12 +18,13 @@ import gzip
 import json
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 BASE = "https://swissdevjobs.ch"
 UA = (
@@ -30,8 +32,12 @@ UA = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-CACHE_DIR = Path(os.environ.get("SDJ_CACHE_DIR", Path.home() / ".cache" / "swissdevjobs-cli"))
-CONFIG_DIR = Path(os.environ.get("SDJ_CONFIG_DIR", Path.home() / ".config" / "swissdevjobs-cli"))
+CACHE_DIR = Path(
+    os.environ.get("SDJ_CACHE_DIR", Path.home() / ".cache" / "swissdevjobs-cli")
+)
+CONFIG_DIR = Path(
+    os.environ.get("SDJ_CONFIG_DIR", Path.home() / ".config" / "swissdevjobs-cli")
+)
 COOKIE_FILE = CONFIG_DIR / "cookies.txt"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -122,6 +128,7 @@ def _decorate_posted_at(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     `activeFrom`, this never changes when SDJ re-promotes a listing.
     """
     from datetime import datetime, timezone
+
     for j in jobs:
         oid = j.get("_id") or ""
         try:
@@ -134,7 +141,9 @@ def _decorate_posted_at(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return jobs
 
 
-def list_jobs(*, max_age_seconds: int = 600, force: bool = False) -> list[dict[str, Any]]:
+def list_jobs(
+    *, max_age_seconds: int = 600, force: bool = False
+) -> list[dict[str, Any]]:
     from . import db
 
     if not force:
@@ -155,7 +164,9 @@ def list_jobs(*, max_age_seconds: int = 600, force: bool = False) -> list[dict[s
     return _decorate_posted_at(data)
 
 
-def get_job(job_id: str, *, max_age_seconds: int = 3600, force: bool = False) -> dict[str, Any]:
+def get_job(
+    job_id: str, *, max_age_seconds: int = 3600, force: bool = False
+) -> dict[str, Any]:
     from . import db
 
     if not force:
@@ -172,7 +183,7 @@ def job_url(slug_or_id: str) -> str:
     return f"{BASE}/jobs/{slug_or_id}"
 
 
-def resolve_id(jobs: list[dict[str, Any]], query: str) -> Optional[dict[str, Any]]:
+def resolve_id(jobs: list[dict[str, Any]], query: str) -> dict[str, Any] | None:
     q = query.lower()
     for j in jobs:
         if j["_id"] == query or j.get("jobUrl", "").lower() == q:

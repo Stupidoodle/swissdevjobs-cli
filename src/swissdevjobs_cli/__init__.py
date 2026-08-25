@@ -1,3 +1,5 @@
+"""swissdevjobs-cli: job-board client, CLI, and MCP server."""
+
 __version__ = "0.3.0"
 
 # Load .env before api/db read the environment at import time.

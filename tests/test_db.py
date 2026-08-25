@@ -1,3 +1,5 @@
+"""Offline tests for db."""
+
 from __future__ import annotations
 
 from conftest import job
@@ -56,7 +58,9 @@ def test_marking_the_same_job_twice_updates_rather_than_duplicates(fresh_db):
 
 def test_is_job_applied_matches_on_id(fresh_db):
     fresh_db.mark_applied(
-        job_id=job()["_id"], company="Acme AG", role="Senior Python Engineer",
+        job_id=job()["_id"],
+        company="Acme AG",
+        role="Senior Python Engineer",
         method="direct",
     )
     assert fresh_db.is_job_applied(job()) is True
@@ -65,7 +69,9 @@ def test_is_job_applied_matches_on_id(fresh_db):
 def test_is_job_applied_falls_back_to_company_and_role(fresh_db):
     """An application made elsewhere still suppresses the same role here."""
     fresh_db.mark_applied(
-        job_id=None, company="Acme AG", role="Senior Python Engineer",
+        job_id=None,
+        company="Acme AG",
+        role="Senior Python Engineer",
         method="linkedin",
     )
     assert fresh_db.is_job_applied(job(_id="ffffffffffffffffffffffff")) is True
