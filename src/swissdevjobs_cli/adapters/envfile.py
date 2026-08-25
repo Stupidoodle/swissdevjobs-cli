@@ -8,6 +8,11 @@ Search order:
   1. $SDJ_ENV_FILE            explicit override
   2. ./.env                   project-local, walking up to the filesystem root
   3. $SDJ_CONFIG_DIR/.env     defaults to ~/.config/swissdevjobs-cli/.env
+
+This module must stay free of import-time path constants: it runs before
+anything else reads the environment, so resolving directories eagerly here
+would defeat `.env`-provided SDJ_CACHE_DIR / SDJ_CONFIG_DIR overrides.
+Eager path constants live in `swissdevjobs_cli.adapters.paths` instead.
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-LOADED: list[str] = []  # paths actually read, in load order — surfaced by `sdj config`
+LOADED: list[str] = []  # paths actually read, in load order — shown by `sdj config`
 
 TEMPLATE = """\
 # swissdevjobs-cli configuration.
@@ -33,6 +38,7 @@ SDJ_EMAIL="you@example.com"
 
 
 def config_dir() -> Path:
+    """The directory holding user config (.env, cookie jar)."""
     return Path(
         os.environ.get("SDJ_CONFIG_DIR") or Path.home() / ".config" / "swissdevjobs-cli"
     ).expanduser()
@@ -54,6 +60,7 @@ def _unquote(value: str) -> str:
 
 
 def parse(text: str) -> dict[str, str]:
+    """Parse .env text into a dict; malformed lines are skipped, not errors."""
     out: dict[str, str] = {}
     for raw in text.splitlines():
         line = raw.strip()
@@ -89,7 +96,7 @@ def _candidates() -> list[Path]:
 
 def load() -> list[str]:
     """Populate os.environ from the first-found values. Existing vars are kept."""
-    seen: set[Path] = set()
+    seen: set = set()
     for path in _candidates():
         if path in seen:
             continue

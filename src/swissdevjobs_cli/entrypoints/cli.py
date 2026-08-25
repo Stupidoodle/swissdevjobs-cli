@@ -3,23 +3,82 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
 import textwrap
 import webbrowser
-from typing import Any
 
-from . import api, dotenv
-from .captcha import with_retry
-from .filter import matches, sort_key
-from .payloads import apply_payload, fmt_salary, strip_html, undeliverable
+from swissdevjobs_cli import bootstrap
+from swissdevjobs_cli.adapters import envfile
+from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
+from swissdevjobs_cli.adapters.http.client import CaptchaRequired, store_clearance
+from swissdevjobs_cli.domain.model.application import Applicant
+from swissdevjobs_cli.domain.model.job import Job, strip_html
+from swissdevjobs_cli.dto.application import as_dict_or_none
+from swissdevjobs_cli.dto.job import JobDetailDTO
+from swissdevjobs_cli.service_layer import apply as apply_service
+from swissdevjobs_cli.service_layer import config as config_service
+from swissdevjobs_cli.service_layer import search, tracking
+
+# --- Cloudflare challenge UX ------------------------------------------------
+# The boards sit behind Cloudflare; a headless client can't solve the JS
+# challenge, so the documented UX is: pause, open the URL in the user's
+# browser, let them solve it, and paste the cf_clearance cookie back here.
 
 
-def _print_row(j: dict[str, Any]) -> None:
-    tags = ", ".join((j.get("filterTags") or [])[:6])
-    posted = (j.get("postedAt") or "")[:10]  # immutable, decoded from _id
-    active = (j.get("activeFrom") or "")[:10]  # bumped when SDJ re-promotes
+def interactive_unblock(runtime: bootstrap.Runtime, challenge_url: str) -> bool:
+    """Block the CLI, open the URL in a browser, prompt for the cf_clearance cookie.
+
+    Returns True once the cookie is stored so callers may retry; False if
+    aborted. Designed to be safely called from any command — it is a
+    synchronous gate.
+    """
+    board = runtime.board_config
+    host = board.base_url.split("//", 1)[-1]
+    print("", file=sys.stderr)
+    print("Cloudflare challenge detected.", file=sys.stderr)
+    print(f"Opening {challenge_url} in your default browser.", file=sys.stderr)
+    print(
+        "Solve the challenge, then in DevTools → Application → Cookies copy the\n"
+        f"value of 'cf_clearance' (on .{host}) and paste it below.\n"
+        "Press Enter with empty input to abort.",
+        file=sys.stderr,
+    )
+    with contextlib.suppress(Exception):
+        webbrowser.open(challenge_url, new=2)
+    try:
+        value = input("cf_clearance cookie value: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    if not value:
+        return False
+    from swissdevjobs_cli.adapters import paths
+
+    store_clearance(paths.COOKIE_FILE, value, f".{host}")
+    print("Saved. Retrying request…", file=sys.stderr)
+    return True
+
+
+def with_retry(runtime: bootstrap.Runtime, fn, *args, **kwargs):
+    """Run `fn`; if it raises CaptchaRequired, prompt the user and retry once."""
+    try:
+        return fn(*args, **kwargs)
+    except CaptchaRequired as e:
+        if interactive_unblock(runtime, e.url):
+            return fn(*args, **kwargs)
+        raise
+
+
+# --- commands ---------------------------------------------------------------
+
+
+def _print_row(j: Job) -> None:
+    raw = j.raw
+    tags = ", ".join((raw.get("filterTags") or [])[:6])
+    posted = (raw.get("postedAt") or "")[:10]  # immutable, decoded from _id
+    active = (raw.get("activeFrom") or "")[:10]  # bumped when SDJ re-promotes
     # If both are present, show "posted/active" — otherwise just whichever exists.
     if posted and active and posted != active:
         date_col = f"p={posted} a={active}"
@@ -30,26 +89,45 @@ def _print_row(j: dict[str, Any]) -> None:
     else:
         date_col = ""
     line = (
-        f"{j['_id']}  "
+        f"{raw['_id']}  "
         f"{date_col:24}  "
-        f"{(j.get('name') or '')[:48]:48}  "
-        f"{(j.get('company') or '')[:25]:25}  "
-        f"{(j.get('actualCity') or j.get('cityCategory') or '')[:12]:12}  "
-        f"{fmt_salary(j):22}  "
-        f"{(j.get('workplace') or '')[:7]:7}  "
+        f"{(raw.get('name') or '')[:48]:48}  "
+        f"{(raw.get('company') or '')[:25]:25}  "
+        f"{(raw.get('actualCity') or raw.get('cityCategory') or '')[:12]:12}  "
+        f"{j.salary.format():22}  "
+        f"{(raw.get('workplace') or '')[:7]:7}  "
         f"{tags}"
     )
     print(line)
 
 
-def cmd_list(args: argparse.Namespace) -> int:
-    from . import db
+def _window(filtered: list, args: argparse.Namespace, total: int):
+    """Windowing: --limit (hard cap) wins; otherwise --page / --per-page paginate."""
+    page_info = None
+    if args.limit and args.limit > 0:
+        return filtered[: args.limit], page_info
+    if args.per_page and args.per_page > 0 and args.page and args.page >= 1:
+        per = args.per_page
+        page = args.page
+        total_pages = max(1, (total + per - 1) // per)
+        # Only window if explicitly paged (page > 1) OR total exceeds one page AND user
+        # asked for a page. With default page=1, only window when there's overflow AND
+        # a non-default per-page value. Otherwise return all.
+        if page > 1 or (args.per_page != 50 and total > per):
+            start = (page - 1) * per
+            filtered = filtered[start : start + per]
+            page_info = (page, total_pages, per)
+    return filtered, page_info
 
-    jobs = with_retry(api.list_jobs, force=args.refresh)
+
+def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """Search, filter, sort, and print the feed."""
+    uow, board = runtime.uow, runtime.board
+    jobs = with_retry(runtime, search.list_jobs, uow, board, force=args.refresh)
     filtered = [
         j
         for j in jobs
-        if matches(
+        if search.matches(
             j,
             tech=args.tech,
             tech_any=not args.tech_all,
@@ -64,34 +142,20 @@ def cmd_list(args: argparse.Namespace) -> int:
             company=args.company,
         )
     ]
-    filtered.sort(key=lambda j: sort_key(j, by=args.sort))
+    filtered.sort(key=lambda j: search.sort_key(j, by=args.sort))
 
     # Always hide jobs already applied to, unless explicitly overridden.
     hide_count = 0
     if not args.include_applied:
         before = len(filtered)
-        filtered = [j for j in filtered if not db.is_job_applied(j)]
+        filtered = [j for j in filtered if not tracking.is_job_applied(uow, j)]
         hide_count = before - len(filtered)
 
     total_after_filters = len(filtered)
-
-    # Apply windowing: --limit (hard cap) wins; otherwise --page / --per-page paginate.
-    page_info = None
-    if args.limit and args.limit > 0:
-        filtered = filtered[: args.limit]
-    elif args.per_page and args.per_page > 0 and args.page and args.page >= 1:
-        per = args.per_page
-        page = args.page
-        total_pages = max(1, (total_after_filters + per - 1) // per)
-        # Only window if explicitly paged (page > 1) OR total exceeds one page AND user
-        # asked for a page. With default page=1, only window when there's overflow AND
-        # a non-default per-page value. Otherwise return all.
-        if page > 1 or (args.per_page != 50 and total_after_filters > per):
-            start = (page - 1) * per
-            filtered = filtered[start : start + per]
-            page_info = (page, total_pages, per)
+    filtered, page_info = _window(filtered, args, total_after_filters)
 
     if args.json:
+        rows = [dict(j.raw) for j in filtered]
         if page_info:
             page, total_pages, per = page_info
             print(
@@ -103,7 +167,7 @@ def cmd_list(args: argparse.Namespace) -> int:
                         "page": page,
                         "per_page": per,
                         "total_pages": total_pages,
-                        "jobs": filtered,
+                        "jobs": rows,
                     },
                     indent=2,
                     ensure_ascii=False,
@@ -111,14 +175,17 @@ def cmd_list(args: argparse.Namespace) -> int:
             )
         else:
             # Backward-compatible flat list when no pagination requested.
-            print(json.dumps(filtered, indent=2, ensure_ascii=False))
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0
 
     if not filtered:
         print("No matching jobs.", file=sys.stderr)
         return 1
 
-    header = f"{len(filtered)} shown · {total_after_filters} match filters · {len(jobs)} in feed"
+    header = (
+        f"{len(filtered)} shown · {total_after_filters} match filters · "
+        f"{len(jobs)} in feed"
+    )
     if hide_count:
         header += f" · {hide_count} hidden (already applied)"
     if page_info:
@@ -131,33 +198,38 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_show(args: argparse.Namespace) -> int:
-    jobs = with_retry(api.list_jobs)
-    job = api.resolve_id(jobs, args.id)
+def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """Print one posting in full."""
+    uow, board = runtime.uow, runtime.board
+    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
-    detail = with_retry(api.get_job, job["_id"], force=args.refresh)
+    detail = with_retry(
+        runtime, search.get_detail, uow, board, str(job.id), force=args.refresh
+    )
+    raw = detail.raw
 
     if args.json:
-        print(json.dumps(detail, indent=2, ensure_ascii=False))
+        print(json.dumps(dict(raw), indent=2, ensure_ascii=False))
         return 0
 
-    print(f"# {detail.get('name')}  @  {detail.get('company')}")
+    print(f"# {raw.get('name')}  @  {raw.get('company')}")
     print(
-        f"Location:   {detail.get('actualCity')} ({detail.get('cityCategory')})  "
-        f"workplace={detail.get('workplace')}  visa={detail.get('hasVisaSponsorship')}"
+        f"Location:   {raw.get('actualCity')} ({raw.get('cityCategory')})  "
+        f"workplace={raw.get('workplace')}  visa={raw.get('hasVisaSponsorship')}"
     )
     print(
-        f"Level:      {detail.get('expLevel')}   Language: {detail.get('language')}   "
-        f"Type: {detail.get('jobType')}"
+        f"Level:      {raw.get('expLevel')}   Language: {raw.get('language')}   "
+        f"Type: {raw.get('jobType')}"
     )
-    print(f"Salary:     {fmt_salary(detail)}")
-    print(f"Tech:       {', '.join(detail.get('technologies') or [])}")
-    print(f"URL:        {api.job_url(detail.get('jobUrl', ''))}")
+    print(f"Salary:     {detail.salary.format()}")
+    print(f"Tech:       {', '.join(raw.get('technologies') or [])}")
+    print(f"URL:        {acl.posting_url(runtime.board_config, raw.get('jobUrl', ''))}")
     print(
-        f"Contact:    {detail.get('candidateContactWay')}  "
-        f"{detail.get('emailAddressForApplications') or detail.get('redirectJobUrl') or ''}"
+        f"Contact:    {raw.get('candidateContactWay')}  "
+        f"{raw.get('emailAddressForApplications') or raw.get('redirectJobUrl') or ''}"
     )
     print()
     for label, key in (
@@ -166,7 +238,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         ("Must-have", "requirementsMustTextArea"),
         ("Nice-to-have", "requirementsNiceTextArea"),
     ):
-        val = detail.get(key)
+        val = raw.get(key)
         if val:
             print(f"## {label}")
             print(textwrap.indent(strip_html(val), "  "))
@@ -174,23 +246,53 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_open(args: argparse.Namespace) -> int:
-    jobs = with_retry(api.list_jobs)
-    job = api.resolve_id(jobs, args.id)
+def cmd_open(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """Open a posting in the default browser."""
+    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.board)
+    job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
-    url = api.job_url(job["jobUrl"])
+    url = acl.posting_url(runtime.board_config, job.slug)
     print(url)
     webbrowser.open(url, new=2)
     return 0
 
 
-def cmd_apply(args: argparse.Namespace) -> int:
+def _complete_application(args, runtime, detail, existing) -> int:
+    """Handle `apply --complete <method>`: record without submitting anything."""
+    raw = detail.raw
+    if existing:
+        app = existing.as_dict()
+    else:
+        app = tracking.mark_applied(
+            runtime.uow,
+            job_id=str(detail.id),
+            company=raw.get("company", ""),
+            role=raw.get("name", ""),
+            method=args.complete,
+            notes=args.notes,
+        ).as_dict()
+    if args.json:
+        payload = {
+            "marked": True,
+            "application": app,
+            "job_id": str(detail.id),
+            "company": raw.get("company"),
+            "title": raw.get("name"),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Marked as applied via {args.complete}")
+    return 0
+
+
+def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Surface the application mechanism so an agent (or human) can act on it.
 
     Three modes you'll see in the wild:
-      1. candidateContactWay == "Email": apply by email; address in emailAddressForApplications
+      1. candidateContactWay == "Email": apply by email; the address is in
+         emailAddressForApplications
       2. candidateContactWay == "CompanyWebsite": redirectJobUrl points to a third-party
          ATS (Recruitee, Workday, Greenhouse, Lever, SmartRecruiters, etc.). An agent
          should open that URL with chrome-mcp and fill the form manually.
@@ -199,44 +301,25 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     With --complete <method>, marks the job as applied (for email/browser modes).
     """
-    from . import db
-
-    jobs = with_retry(api.list_jobs)
-    job = api.resolve_id(jobs, args.id)
+    uow, board = runtime.uow, runtime.board
+    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
-    d = with_retry(api.get_job, job["_id"])
+    detail = with_retry(runtime, search.get_detail, uow, board, str(job.id))
+    raw = detail.raw
 
-    posting_url = api.job_url(d.get("jobUrl", ""))
-    existing = db.is_applied(d["_id"])
+    posting_url = acl.posting_url(runtime.board_config, raw.get("jobUrl", ""))
+    existing = tracking.existing_application(uow, str(detail.id))
 
     # If --complete flag is set, mark as applied
     if args.complete:
-        if existing:
-            app = existing
-        else:
-            app = db.mark_applied(
-                job_id=d["_id"],
-                company=d.get("company", ""),
-                role=d.get("name", ""),
-                method=args.complete,
-                notes=args.notes,
-            )
-        if args.json:
-            payload = {
-                "marked": True,
-                "application": app,
-                "job_id": d["_id"],
-                "company": d.get("company"),
-                "title": d.get("name"),
-            }
-            print(json.dumps(payload, indent=2, ensure_ascii=False))
-            return 0
-        print(f"Marked as applied via {args.complete}")
-        return 0
+        return _complete_application(args, runtime, detail, existing)
 
-    payload = apply_payload(d, posting_url=posting_url, applied=existing)
+    payload = JobDetailDTO.from_domain(
+        detail, posting_url=posting_url, applied=as_dict_or_none(existing)
+    ).as_dict()
     email = payload["apply_email"]
     redirect = payload["apply_url"]
     fallback = payload["fallback_mode"]
@@ -249,7 +332,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
     print(f"Apply mode: DIRECT  (fallback: {fallback.upper()})")
     if existing:
         print(
-            f"STATUS:     Already applied on {existing['applied_at']} via {existing['method']}"
+            f"STATUS:     Already applied on {existing.applied_at} "
+            f"via {existing.method}"
         )
     print(f"Posting:    {posting_url}")
     print(
@@ -257,7 +341,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
     )
     print(f"Salary:     {payload['salary']}   Language: {payload['language']}")
     print(
-        f"Workflow:   sdj direct-apply {d['_id']} --cv <cv.pdf> --motivation <text|path>"
+        f"Workflow:   sdj direct-apply {detail.id} "
+        "--cv <cv.pdf> --motivation <text|path>"
     )
     if fallback == "email":
         print(f"Fallback:   email to {email}")
@@ -273,15 +358,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_tech(args: argparse.Namespace) -> int:
-    jobs = with_retry(api.list_jobs)
-    from collections import Counter
-
-    c: Counter[str] = Counter()
-    for j in jobs:
-        for t in j.get("filterTags") or []:
-            c[t] += 1
-    top = c.most_common(args.limit)
+def cmd_tech(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """Print the most-tagged technologies across the feed."""
+    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.board)
+    top = search.top_technologies(jobs, args.limit)
     if args.json:
         print(json.dumps(top, indent=2))
         return 0
@@ -290,19 +370,15 @@ def cmd_tech(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_auth(args: argparse.Namespace) -> int:
+def cmd_auth(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Proactively open the site so the user can clear a Cloudflare challenge."""
-    from .captcha import interactive_unblock
-
-    ok = interactive_unblock(api.BASE + "/")
+    ok = interactive_unblock(runtime, runtime.board_config.base_url + "/")
     return 0 if ok else 1
 
 
-def cmd_applications(args: argparse.Namespace) -> int:
+def cmd_applications(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """List all tracked applications."""
-    from . import db
-
-    apps = db.list_applications(limit=args.limit)
+    apps = [r.as_dict() for r in tracking.list_applications(runtime.uow, args.limit)]
 
     if args.json:
         print(json.dumps(apps, indent=2, ensure_ascii=False))
@@ -327,92 +403,96 @@ def cmd_applications(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_stats(args: argparse.Namespace) -> int:
+def cmd_stats(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Show database statistics."""
-    from . import db
-
-    stats = db.get_stats()
+    stats = tracking.stats(runtime.uow)
 
     if args.json:
         print(json.dumps(stats, indent=2))
         return 0
 
     print(
-        f"Jobs cached:     {stats['jobs_cached']} (light), {stats['jobs_with_detail']} (detail)"
+        f"Jobs cached:     {stats['jobs_cached']} (light), "
+        f"{stats['jobs_with_detail']} (detail)"
     )
     print(
-        f"Applications:    {stats['applications_total']} total ({stats['applications_submitted']} submitted)"
+        f"Applications:    {stats['applications_total']} total "
+        f"({stats['applications_submitted']} submitted)"
     )
     print(f"Database:        {stats['db_path']}")
     return 0
 
 
-def cmd_direct_apply(args: argparse.Namespace) -> int:
-    """Submit an application directly via the SwissDevJobs native form (POST /api/jobApply).
-
-    This bypasses external ATS systems and email — the application is sent
-    through SwissDevJobs' own form, which forwards it to the company.
-
-    Honeypot fields (yearsOfExperience, personal_website_url, address,
-    required_confirmation) are intentionally left empty.
-
-    Auto-marks job as applied on success. Returns {"already_applied": true} if
-    already applied (use --force to override).
-    """
-    from . import db
-
-    missing = [
-        flag
-        for flag, value in (
-            ("--name/$SDJ_NAME", args.name),
-            ("--email/$SDJ_EMAIL", args.email),
-            ("--cv/$SDJ_CV", args.cv),
-        )
-        if not value
-    ]
-    if missing:
+def _resolve_identity(args) -> Applicant | None:
+    """Applicant identity from flags/env, with the historic CLI error text."""
+    resolved = config_service.resolve_applicant(
+        args.name,
+        args.email,
+        args.cv,
+        labels=("--name/$SDJ_NAME", "--email/$SDJ_EMAIL", "--cv/$SDJ_CV"),
+    )
+    if isinstance(resolved, list):
         print(
-            f"Error: missing {', '.join(missing)}.\n"
-            f"       Run `sdj config --init` to create {dotenv.config_dir() / '.env'},\n"
+            f"Error: missing {', '.join(resolved)}.\n"
+            "       Run `sdj config --init` to create "
+            f"{envfile.config_dir() / '.env'},\n"
             f"       then fill in your details there.",
             file=sys.stderr,
         )
-        return 1
-    if not os.path.isfile(args.cv):
-        print(f"Error: CV not found: {args.cv}", file=sys.stderr)
-        return 1
+        return None
+    if not os.path.isfile(resolved.cv_path):
+        print(f"Error: CV not found: {resolved.cv_path}", file=sys.stderr)
+        return None
+    return resolved
 
-    jobs = with_retry(api.list_jobs)
-    job = api.resolve_id(jobs, args.id)
-    if not job:
-        print(f"No job matching {args.id!r}", file=sys.stderr)
-        return 1
+
+def _resolve_motivation(value: str) -> str | None:
+    """The --motivation argument: inline text, or a path to read. None = error."""
+    motivation = value.strip()
+    # If it looks like a file path and the file exists, read it
+    if motivation and os.path.exists(motivation):
+        with open(motivation, encoding="utf-8") as fh:
+            motivation = fh.read().strip()
+    if not motivation:
+        print("Error: --motivation TEXT_OR_PATH is required", file=sys.stderr)
+        return None
+
+    # Validate no HTML in motivation (site rejects < and >)
+    if apply_service.validate_motivation(motivation):
+        print(
+            "Error: motivation letter must not contain < or > characters",
+            file=sys.stderr,
+        )
+        return None
+    return motivation
+
+
+def _direct_apply_preflight(args, runtime, job):
+    """Dedup + deliverability checks. Returns the detail, or an exit code."""
+    uow, board = runtime.uow, runtime.board
 
     # Check for existing application (dedup as data, not error)
-    existing = db.is_applied(job["_id"])
+    existing = tracking.existing_application(uow, str(job.id))
     if existing and not args.force:
         if args.json:
             print(
-                json.dumps({"already_applied": True, "application": existing}, indent=2)
+                json.dumps(
+                    {"already_applied": True, "application": existing.as_dict()},
+                    indent=2,
+                )
             )
             return 0  # Success exit - agent handles this
-        print(f"Already applied on {existing['applied_at']} via {existing['method']}")
+        print(f"Already applied on {existing.applied_at} via {existing.method}")
         print("Use --force to apply again.")
         return 1
 
-    d = with_retry(api.get_job, job["_id"])
+    detail = with_retry(runtime, search.get_detail, uow, board, str(job.id))
 
-    # Non-deliverable detection. The native POST /api/jobApply only reaches the
-    # company when SwissDevJobs holds a real forwarding channel — i.e. the
-    # posting has candidateContactWay == "Email" with emailAddressForApplications
-    # set. Two cases silently black-hole (endpoint returns 200, company never
-    # receives the submission):
-    #   1. Aggregator syndication (talent.com / jometer) — no forwarding channel.
-    #   2. candidateContactWay == "CompanyWebsite" — SDJ merely links out to the
-    #      company's own ATS (umantis, Personio, applytojob, etc.); there is no
-    #      native form delivery. emailAddressForApplications is null for these.
-    # In both cases refuse and route the agent to chrome MCP on redirectJobUrl.
-    refusal = undeliverable(d)
+    # Non-deliverable detection: the native POST only reaches the company when
+    # the board holds a real forwarding channel. Aggregator syndication and
+    # CompanyWebsite postings silently black-hole (HTTP 200, nothing sent), so
+    # refuse and route the agent to chrome MCP on the real ATS URL instead.
+    refusal = apply_service.undeliverable(detail)
     if refusal and not args.force:
         if args.json:
             print(json.dumps(refusal, indent=2))
@@ -424,58 +504,76 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
         return 2
+    return detail
 
-    motivation = args.motivation.strip()
-    # If it looks like a file path and the file exists, read it
-    if motivation and os.path.exists(motivation):
-        with open(motivation, encoding="utf-8") as fh:
-            motivation = fh.read().strip()
-    if not motivation:
-        print("Error: --motivation TEXT_OR_PATH is required", file=sys.stderr)
+
+def cmd_direct_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """Submit an application directly via the board's native form (POST /api/jobApply).
+
+    This bypasses external ATS systems and email — the application is sent
+    through the board's own form, which forwards it to the company.
+
+    Honeypot fields (yearsOfExperience, personal_website_url, address,
+    required_confirmation) are intentionally left empty.
+
+    Auto-marks job as applied on success. Returns {"already_applied": true} if
+    already applied (use --force to override).
+    """
+    uow, board = runtime.uow, runtime.board
+
+    resolved = _resolve_identity(args)
+    if resolved is None:
         return 1
 
-    # Validate no HTML in motivation (site rejects < and >)
-    if "<" in motivation or ">" in motivation:
-        print(
-            "Error: motivation letter must not contain < or > characters",
-            file=sys.stderr,
-        )
+    jobs = with_retry(runtime, search.list_jobs, uow, board)
+    job = search.resolve(jobs, args.id)
+    if not job:
+        print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
 
-    if not args.json:
-        print("Submitting direct application to SwissDevJobs...")
-        print(
-            f"  Role:    {d.get('name')} @ {d.get('company')} ({d.get('actualCity')})"
-        )
-        print(f"  Salary:  {fmt_salary(d)}")
-        print(f"  CV:      {args.cv}")
-        print(f"  Name:    {args.name}")
-        print(f"  Email:   {args.email}")
-        print()
+    preflight = _direct_apply_preflight(args, runtime, job)
+    if isinstance(preflight, int):
+        return preflight
+    detail = preflight
+    raw = detail.raw
 
-    result = with_retry(
-        api.direct_apply,
-        d,
-        name=args.name,
-        email=args.email,
-        motivation=motivation,
-        cv_path=args.cv,
+    motivation = _resolve_motivation(args.motivation)
+    if motivation is None:
+        return 1
+
+    applicant = Applicant(
+        name=resolved.name,
+        email=resolved.email,
+        cv_path=resolved.cv_path,
         is_from_europe=not args.not_eu,
         lang_skills=args.lang_skills,
     )
 
-    # Auto-mark as applied on success
-    application = None
-    if result["status"] == 200:
-        application = db.mark_applied(
-            job_id=d["_id"],
-            company=d.get("company", ""),
-            role=d.get("name", ""),
-            method="direct",
+    if not args.json:
+        print("Submitting direct application to SwissDevJobs...")
+        print(
+            f"  Role:    {raw.get('name')} @ {raw.get('company')} "
+            f"({raw.get('actualCity')})"
         )
+        print(f"  Salary:  {detail.salary.format()}")
+        print(f"  CV:      {applicant.cv_path}")
+        print(f"  Name:    {applicant.name}")
+        print(f"  Email:   {applicant.email}")
+        print()
+
+    result, application = with_retry(
+        runtime,
+        apply_service.submit_and_track,
+        uow,
+        board,
+        detail,
+        applicant,
+        motivation,
+    )
 
     if args.json:
-        result["application"] = application
+        result = dict(result)
+        result["application"] = as_dict_or_none(application)
         print(json.dumps(result, indent=2))
     else:
         print(f"✓ Submitted — HTTP {result['status']}")
@@ -483,17 +581,15 @@ def cmd_direct_apply(args: argparse.Namespace) -> int:
         if resp:
             print(f"  Response: {resp[:200]}")
         if application:
-            print(f"  Marked as applied (id: {application['id']})")
+            print(f"  Marked as applied (id: {application.id})")
     return 0
 
 
-def cmd_config(args: argparse.Namespace) -> int:
+def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Show the resolved configuration, or scaffold a .env file."""
-    from . import db
-
     if args.init:
         try:
-            path = dotenv.write_template()
+            path = envfile.write_template()
         except FileExistsError as e:
             print(f"{e.args[0]} already exists — edit it directly.", file=sys.stderr)
             return 1
@@ -501,16 +597,14 @@ def cmd_config(args: argparse.Namespace) -> int:
         print("Fill in SDJ_NAME and SDJ_EMAIL, then run `sdj config` to verify.")
         return 0
 
-    resolved = {
-        "name": os.environ.get("SDJ_NAME"),
-        "email": os.environ.get("SDJ_EMAIL"),
-        "cv": os.environ.get("SDJ_CV"),
-        "cache_dir": str(api.CACHE_DIR),
-        "config_dir": str(api.CONFIG_DIR),
-        "cookie_file": str(api.COOKIE_FILE),
-        "database": str(db.DB_PATH),
-        "env_files_loaded": dotenv.LOADED,
-    }
+    locations = bootstrap.resolved_paths()
+    resolved = config_service.resolved_config(
+        locations["env_files_loaded"],
+        cache_dir=locations["cache_dir"],
+        config_dir=locations["config_dir"],
+        cookie_file=locations["cookie_file"],
+        db_path=locations["db_path"],
+    )
 
     if args.json:
         print(json.dumps(resolved, indent=2))
@@ -537,6 +631,7 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """The full argparse tree; kept in one place so --help shows everything."""
     p = argparse.ArgumentParser(
         prog="swissdevjobs",
         description="CLI for swissdevjobs.ch — Swiss dev/IT jobs with salary info.",
@@ -576,7 +671,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=0,
-        help="cap output length (0 = no cap, default). Use --page/--per-page for windowed views.",
+        help="cap output length (0 = no cap, default). "
+        "Use --page/--per-page for windowed views.",
     )
     lp.add_argument(
         "--page",
@@ -698,11 +794,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Console-script entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    runtime = bootstrap.build_runtime()
     try:
-        return args.func(args)
-    except api.CaptchaRequired as e:
+        return args.func(args, runtime)
+    except CaptchaRequired as e:
         print(f"Cloudflare challenge unresolved: {e}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

@@ -1,15 +1,16 @@
-"""Offline tests for payloads."""
+"""Offline tests for salary formatting, HTML stripping, and apply payloads."""
 
 from __future__ import annotations
 
-from conftest import job
-from swissdevjobs_cli.payloads import (
-    apply_payload,
-    fallback_mode,
-    fmt_salary,
-    strip_html,
-    undeliverable,
-)
+from conftest import domain_detail, job
+from swissdevjobs_cli.domain.model.job import strip_html
+from swissdevjobs_cli.domain.model.salary import SalaryRange
+from swissdevjobs_cli.dto.job import JobDetailDTO
+from swissdevjobs_cli.service_layer.apply import fallback_mode, undeliverable
+
+
+def fmt_salary(wire) -> str:
+    return SalaryRange.from_wire(wire).format()
 
 
 def test_salary_uses_swiss_thousands_separators():
@@ -25,10 +26,10 @@ def test_strip_html_turns_markup_into_readable_text():
 
 
 def test_fallback_mode_prefers_a_real_email_address():
-    assert fallback_mode(job()) == "email"
+    assert fallback_mode(domain_detail()) == "email"
     assert (
         fallback_mode(
-            job(
+            domain_detail(
                 candidateContactWay="CompanyWebsite",
                 emailAddressForApplications=None,
                 redirectJobUrl="https://acme.example/apply",
@@ -38,7 +39,7 @@ def test_fallback_mode_prefers_a_real_email_address():
     )
     assert (
         fallback_mode(
-            job(
+            domain_detail(
                 candidateContactWay=None,
                 emailAddressForApplications=None,
                 redirectJobUrl=None,
@@ -49,11 +50,13 @@ def test_fallback_mode_prefers_a_real_email_address():
 
 
 def test_a_forwardable_posting_is_not_refused():
-    assert undeliverable(job()) is None
+    assert undeliverable(domain_detail()) is None
 
 
 def test_aggregator_syndication_is_refused_and_names_the_host():
-    refusal = undeliverable(job(redirectJobUrl="https://ch.talent.com/view?id=9"))
+    refusal = undeliverable(
+        domain_detail(redirectJobUrl="https://ch.talent.com/view?id=9")
+    )
     assert refusal is not None
     assert refusal["error"] == "aggregator_posting"
     assert refusal["aggregator_host"] == "talent.com"
@@ -62,13 +65,13 @@ def test_aggregator_syndication_is_refused_and_names_the_host():
 
 
 def test_jometer_syndication_is_refused():
-    refusal = undeliverable(job(redirectJobUrl="https://tnl2.jometer.com/x"))
+    refusal = undeliverable(domain_detail(redirectJobUrl="https://tnl2.jometer.com/x"))
     assert refusal["error"] == "aggregator_posting"
 
 
 def test_company_website_without_an_address_is_refused():
     refusal = undeliverable(
-        job(
+        domain_detail(
             candidateContactWay="CompanyWebsite",
             emailAddressForApplications=None,
             redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
@@ -82,7 +85,7 @@ def test_company_website_that_still_has_an_address_is_deliverable():
     # SwissDevJobs can forward this one, so it must not be refused.
     assert (
         undeliverable(
-            job(
+            domain_detail(
                 candidateContactWay="CompanyWebsite",
                 emailAddressForApplications="jobs@acme.example",
                 redirectJobUrl="https://acme.example/careers",
@@ -92,8 +95,16 @@ def test_company_website_that_still_has_an_address_is_deliverable():
     )
 
 
+def apply_payload(detail, *, posting_url, applied=None):
+    return JobDetailDTO.from_domain(
+        detail, posting_url=posting_url, applied=applied
+    ).as_dict()
+
+
 def test_apply_payload_carries_what_a_caller_needs_to_act():
-    payload = apply_payload(job(), posting_url="https://swissdevjobs.ch/jobs/acme")
+    payload = apply_payload(
+        domain_detail(), posting_url="https://swissdevjobs.ch/jobs/acme"
+    )
     assert payload["mode"] == "direct"
     assert payload["fallback_mode"] == "email"
     assert payload["job_id"] == job()["_id"]
@@ -105,12 +116,12 @@ def test_apply_payload_carries_what_a_caller_needs_to_act():
 
 def test_apply_payload_reports_an_existing_application():
     record = {"id": 7, "method": "direct", "applied_at": "2026-08-01"}
-    payload = apply_payload(job(), posting_url="x", applied=record)
+    payload = apply_payload(domain_detail(), posting_url="x", applied=record)
     assert payload["applied"] == record
 
 
 def test_apply_payload_flattens_html_description_fields():
     payload = apply_payload(
-        job(description="<p>Build <b>things</b></p>"), posting_url="x"
+        domain_detail(description="<p>Build <b>things</b></p>"), posting_url="x"
     )
     assert payload["description"] == "Build things"

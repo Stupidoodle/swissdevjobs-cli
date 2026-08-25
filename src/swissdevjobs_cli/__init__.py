@@ -2,7 +2,9 @@
 
 __version__ = "0.3.0"
 
-# Load .env before api/db read the environment at import time.
-from . import dotenv as _dotenv
+# Load .env before any adapter resolves paths from the environment. The
+# loader itself has no import-time constants (see adapters/envfile.py), so
+# a .env-provided SDJ_CACHE_DIR / SDJ_CONFIG_DIR is honored everywhere.
+from swissdevjobs_cli.adapters import envfile as _envfile
 
-_dotenv.load()
+_envfile.load()

@@ -1,10 +1,11 @@
 """Test isolation.
 
-swissdevjobs_cli resolves SDJ_CACHE_DIR / SDJ_CONFIG_DIR at *import* time and
-runs dotenv.load() from its __init__, so the environment has to be redirected
-before the package is imported anywhere. Setting it here at conftest module
-scope is what guarantees that — a fixture would run far too late and the suite
-would read and write the developer's real application database.
+swissdevjobs_cli resolves SDJ_CACHE_DIR / SDJ_CONFIG_DIR at *import* time
+(adapters/paths.py) and runs envfile.load() from its __init__, so the
+environment has to be redirected before the package is imported anywhere.
+Setting it here at conftest module scope is what guarantees that — a fixture
+would run far too late and the suite would read and write the developer's
+real application database.
 """
 
 from __future__ import annotations
@@ -22,31 +23,33 @@ for _leaked in ("SDJ_NAME", "SDJ_EMAIL", "SDJ_CV"):
 
 import pytest  # noqa: E402
 
-from swissdevjobs_cli import api, db  # noqa: E402
+from swissdevjobs_cli.adapters import paths  # noqa: E402
+from swissdevjobs_cli.adapters.boards.registry import BOARDS  # noqa: E402
+from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl  # noqa: E402
+from swissdevjobs_cli.adapters.persistence.unit_of_work import (  # noqa: E402
+    SqliteUnitOfWork,
+)
+
+CH = BOARDS["ch"]
 
 
 def test_sandbox_is_active():
     """Guard: if this fails, every other test is writing to the real database."""
-    assert str(_SANDBOX) in str(db.DB_PATH)
-    assert str(_SANDBOX) in str(api.CACHE_DIR)
-    assert str(_SANDBOX) in str(api.COOKIE_FILE)
+    assert str(_SANDBOX) in str(paths.DB_PATH)
+    assert str(_SANDBOX) in str(paths.CACHE_DIR)
+    assert str(_SANDBOX) in str(paths.COOKIE_FILE)
 
 
 @pytest.fixture
-def fresh_db(tmp_path, monkeypatch):
-    """A brand-new database per test, with db.py's module singletons reset."""
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
-    monkeypatch.setattr(db, "CACHE_DIR", tmp_path)
-    monkeypatch.setattr(db, "CONFIG_DIR", tmp_path / "config")
-    monkeypatch.setattr(db, "_conn", None)
-    monkeypatch.setattr(db, "_initialized", False)
-    yield db
-    if db._conn is not None:
-        db._conn.close()
+def fresh_uow(tmp_path):
+    """A brand-new database per test."""
+    uow = SqliteUnitOfWork(tmp_path / "test.db", tmp_path, tmp_path / "config", CH)
+    yield uow
+    uow.close()
 
 
 def job(**overrides):
-    """A jobsLight-shaped record with sensible defaults."""
+    """A jobsLight-shaped wire record with sensible defaults."""
     base = {
         "_id": "62eccd7a57370f0152e4950e",
         "jobUrl": "acme-senior-python-engineer",
@@ -69,3 +72,13 @@ def job(**overrides):
     }
     base.update(overrides)
     return base
+
+
+def domain_job(**overrides):
+    """The same record, through the ACL, as a domain Job."""
+    return acl.job_from_wire(job(**overrides), CH)
+
+
+def domain_detail(**overrides):
+    """The same record, through the ACL, as a domain JobDetail."""
+    return acl.detail_from_wire(job(**overrides), CH)

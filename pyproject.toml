@@ -20,9 +20,9 @@ Homepage = "https://github.com/Stupidoodle/swissdevjobs-cli"
 Issues = "https://github.com/Stupidoodle/swissdevjobs-cli/issues"
 
 [project.scripts]
-swissdevjobs = "swissdevjobs_cli.cli:main"
-sdj = "swissdevjobs_cli.cli:main"
-swissdevjobs-mcp = "swissdevjobs_cli.mcp:main"
+swissdevjobs = "swissdevjobs_cli.entrypoints.cli:main"
+sdj = "swissdevjobs_cli.entrypoints.cli:main"
+swissdevjobs-mcp = "swissdevjobs_cli.entrypoints.mcp:main"
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.13.0"]
@@ -48,11 +48,6 @@ select = ["E", "F", "C", "D", "B", "I", "Q", "UP", "ASYNC", "TID", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S108", "D101", "D102", "D103", "D104", "D105", "D107"]
-# Legacy modules pending the cosmic-python restructure; these ignores are
-# removed in the refactor commit, where every file is rewritten in place.
-"src/swissdevjobs_cli/{api,captcha,cli,db,dotenv,filter,mcp,payloads,__main__}.py" = [
-    "D", "S", "C901", "E501",
-]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -89,3 +84,28 @@ exclude_also = [
     "^\\s*\\.\\.\\.$",
     "class .*\\(Protocol\\):",
 ]
+
+[tool.importlinter]
+root_package = "swissdevjobs_cli"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers point inward only"
+type = "layers"
+layers = [
+    "swissdevjobs_cli.entrypoints",
+    "swissdevjobs_cli.dto",
+    "swissdevjobs_cli.service_layer",
+    "swissdevjobs_cli.adapters",
+    "swissdevjobs_cli.domain",
+]
+# bootstrap.py is the composition root: wiring every layer together is its
+# job, so it is deliberately outside the contract rather than an exception
+# inside it.
+exhaustive = false
+
+[[tool.importlinter.contracts]]
+name = "The domain is stdlib-only"
+type = "forbidden"
+source_modules = ["swissdevjobs_cli.domain"]
+forbidden_modules = ["pydantic", "requests", "httpx", "urllib3"]

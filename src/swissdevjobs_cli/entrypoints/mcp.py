@@ -18,11 +18,19 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+from pathlib import Path
 from typing import Any, Callable
 
-from . import api, db
-from .filter import matches, sort_key
-from .payloads import apply_payload, fmt_salary, undeliverable
+from swissdevjobs_cli import bootstrap
+from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
+from swissdevjobs_cli.adapters.http.client import CaptchaRequired
+from swissdevjobs_cli.domain.model.job import Job
+from swissdevjobs_cli.dto.application import as_dict_or_none
+from swissdevjobs_cli.dto.apply_preview import WouldSubmitDTO
+from swissdevjobs_cli.dto.job import JobDetailDTO, JobSummaryDTO
+from swissdevjobs_cli.service_layer import apply as apply_service
+from swissdevjobs_cli.service_layer import config as config_service
+from swissdevjobs_cli.service_layer import search, tracking
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "swissdevjobs"
@@ -36,25 +44,14 @@ def _log(message: str) -> None:
 # --- tool implementations ---------------------------------------------------
 
 
-def _summarize(job: dict[str, Any]) -> dict[str, Any]:
+def _summarize(runtime: bootstrap.Runtime, job: Job) -> dict[str, Any]:
     """A compact row. Full descriptions come from get_job, to save context."""
-    return {
-        "job_id": job.get("_id"),
-        "title": job.get("name"),
-        "company": job.get("company"),
-        "city": job.get("actualCity") or job.get("cityCategory"),
-        "salary": fmt_salary(job),
-        "salary_from": job.get("annualSalaryFrom"),
-        "salary_to": job.get("annualSalaryTo"),
-        "workplace": job.get("workplace"),
-        "language": job.get("language"),
-        "technologies": (job.get("filterTags") or [])[:8],
-        "posted_at": job.get("postedAt"),
-        "url": api.job_url(job.get("jobUrl", "")),
-    }
+    url = acl.posting_url(runtime.board_config, job.raw.get("jobUrl", ""))
+    return JobSummaryDTO.from_domain(job, url).as_dict()
 
 
 def tool_search_jobs(
+    runtime: bootstrap.Runtime,
     query: str | None = None,
     tech: list[str] | None = None,
     tech_all: bool = False,
@@ -70,11 +67,13 @@ def tool_search_jobs(
     limit: int = 25,
     include_applied: bool = False,
 ) -> dict[str, Any]:
-    jobs = api.list_jobs()
+    """Compact search over the feed with every filter the CLI has."""
+    uow, board = runtime.uow, runtime.board
+    jobs = search.list_jobs(uow, board)
     hits = [
         j
         for j in jobs
-        if matches(
+        if search.matches(
             j,
             tech=tech,
             tech_any=not tech_all,
@@ -89,12 +88,12 @@ def tool_search_jobs(
             company=company,
         )
     ]
-    hits.sort(key=lambda j: sort_key(j, by=sort))
+    hits.sort(key=lambda j: search.sort_key(j, by=sort))
 
     hidden = 0
     if not include_applied:
         before = len(hits)
-        hits = [j for j in hits if not db.is_job_applied(j)]
+        hits = [j for j in hits if not tracking.is_job_applied(uow, j)]
         hidden = before - len(hits)
 
     total = len(hits)
@@ -104,24 +103,27 @@ def tool_search_jobs(
         "total_matching": total,
         "hidden_already_applied": hidden,
         "returned": min(limit, total),
-        "jobs": [_summarize(j) for j in hits[:limit]],
+        "jobs": [_summarize(runtime, j) for j in hits[:limit]],
     }
 
 
-def tool_get_job(job_id: str) -> dict[str, Any]:
-    jobs = api.list_jobs()
-    job = api.resolve_id(jobs, job_id)
+def tool_get_job(runtime: bootstrap.Runtime, job_id: str) -> dict[str, Any]:
+    """The full posting as an apply-ready payload."""
+    uow, board = runtime.uow, runtime.board
+    jobs = search.list_jobs(uow, board)
+    job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
-    detail = api.get_job(job["_id"])
-    return apply_payload(
+    detail = search.get_detail(uow, board, str(job.id))
+    return JobDetailDTO.from_domain(
         detail,
-        posting_url=api.job_url(detail.get("jobUrl", "")),
-        applied=db.is_applied(detail["_id"]),
-    )
+        posting_url=acl.posting_url(runtime.board_config, detail.raw.get("jobUrl", "")),
+        applied=as_dict_or_none(tracking.existing_application(uow, str(detail.id))),
+    ).as_dict()
 
 
 def tool_apply_to_job(
+    runtime: bootstrap.Runtime,
     job_id: str,
     motivation: str,
     cv_path: str,
@@ -132,44 +134,47 @@ def tool_apply_to_job(
     is_from_europe: bool = True,
     force: bool = False,
 ) -> dict[str, Any]:
-    import os
-    from pathlib import Path
-
-    jobs = api.list_jobs()
-    job = api.resolve_id(jobs, job_id)
+    """The irreversible one: native submission behind the confirm gate."""
+    uow, board = runtime.uow, runtime.board
+    jobs = search.list_jobs(uow, board)
+    job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
 
-    detail = api.get_job(job["_id"])
-    existing = db.is_applied(detail["_id"])
+    detail = search.get_detail(uow, board, str(job.id))
+    existing = tracking.existing_application(uow, str(detail.id))
     if existing and not force:
-        return {"already_applied": True, "application": existing}
+        return {"already_applied": True, "application": existing.as_dict()}
 
-    refusal = undeliverable(detail)
+    refusal = apply_service.undeliverable(detail)
     if refusal and not force:
         return refusal
 
-    name = name or os.environ.get("SDJ_NAME")
-    email = email or os.environ.get("SDJ_EMAIL")
-    cv_path = cv_path or os.environ.get("SDJ_CV") or ""
-    missing = [
-        label
-        for label, value in (
-            ("name/$SDJ_NAME", name),
-            ("email/$SDJ_EMAIL", email),
-            ("cv_path/$SDJ_CV", cv_path),
+    resolved = config_service.resolve_applicant(
+        name,
+        email,
+        cv_path,
+        labels=("name/$SDJ_NAME", "email/$SDJ_EMAIL", "cv_path/$SDJ_CV"),
+    )
+    if isinstance(resolved, list):
+        return {"error": "missing_identity", "missing": resolved}
+    if not Path(resolved.cv_path).is_file():
+        return {"error": "cv_not_found", "cv_path": resolved.cv_path}
+    motivation_error = apply_service.validate_motivation(motivation)
+    if motivation_error:
+        return {"error": "invalid_motivation", "message": motivation_error}
+
+    applicant = resolved
+    if not (is_from_europe and lang_skills == "native"):
+        from swissdevjobs_cli.domain.model.application import Applicant
+
+        applicant = Applicant(
+            name=resolved.name,
+            email=resolved.email,
+            cv_path=resolved.cv_path,
+            is_from_europe=is_from_europe,
+            lang_skills=lang_skills,
         )
-        if not value
-    ]
-    if missing or not name or not email:
-        return {"error": "missing_identity", "missing": missing}
-    if not Path(cv_path).is_file():
-        return {"error": "cv_not_found", "cv_path": cv_path}
-    if "<" in motivation or ">" in motivation:
-        return {
-            "error": "invalid_motivation",
-            "message": "The site rejects < and > in the motivation letter.",
-        }
 
     # Irreversible: make the model surface it to a human before it happens.
     if not confirm:
@@ -180,75 +185,61 @@ def tool_apply_to_job(
                 "the salary, and the motivation letter, get their explicit approval, "
                 "then call this tool again with confirm=true."
             ),
-            "would_submit": {
-                "role": detail.get("name"),
-                "company": detail.get("company"),
-                "location": detail.get("actualCity"),
-                "salary": fmt_salary(detail),
-                "applicant": {"name": name, "email": email},
-                "cv_path": cv_path,
-                "motivation_preview": motivation[:400],
-                "motivation_chars": len(motivation),
-            },
+            "would_submit": WouldSubmitDTO.from_domain(
+                detail, applicant, motivation
+            ).as_dict(),
         }
 
-    result = api.direct_apply(
-        detail,
-        name=name,
-        email=email,
-        motivation=motivation,
-        cv_path=cv_path,
-        is_from_europe=is_from_europe,
-        lang_skills=lang_skills,
+    result, application = apply_service.submit_and_track(
+        uow, board, detail, applicant, motivation
     )
-    application = None
-    if result["status"] == 200:
-        application = db.mark_applied(
-            job_id=detail["_id"],
-            company=detail.get("company", ""),
-            role=detail.get("name", ""),
-            method="direct",
-        )
     return {
         "submitted": result["status"] == 200,
         "http_status": result["status"],
         "response": result.get("response", "")[:500],
-        "application": application,
+        "application": as_dict_or_none(application),
     }
 
 
-def tool_list_applications(limit: int = 100) -> dict[str, Any]:
-    apps = db.list_applications(limit=limit)
+def tool_list_applications(
+    runtime: bootstrap.Runtime, limit: int = 100
+) -> dict[str, Any]:
+    """Every tracked application, newest first."""
+    apps = [r.as_dict() for r in tracking.list_applications(runtime.uow, limit=limit)]
     return {"count": len(apps), "applications": apps}
 
 
 def tool_mark_applied(
-    job_id: str, method: str, notes: str | None = None
+    runtime: bootstrap.Runtime,
+    job_id: str,
+    method: str,
+    notes: str | None = None,
 ) -> dict[str, Any]:
-    jobs = api.list_jobs()
-    job = api.resolve_id(jobs, job_id)
+    """Record an application submitted outside this tool."""
+    uow, board = runtime.uow, runtime.board
+    jobs = search.list_jobs(uow, board)
+    job = search.resolve(jobs, job_id)
     if not job:
         raise ValueError(f"No job matching {job_id!r}")
-    detail = api.get_job(job["_id"])
-    return db.mark_applied(
-        job_id=detail["_id"],
-        company=detail.get("company", ""),
-        role=detail.get("name", ""),
+    detail = search.get_detail(uow, board, str(job.id))
+    return tracking.mark_applied(
+        uow,
+        job_id=str(detail.id),
+        company=detail.company,
+        role=detail.title,
         method=method,
         notes=notes,
-    )
+    ).as_dict()
 
 
-def tool_top_technologies(limit: int = 25) -> dict[str, Any]:
-    from collections import Counter
-
-    counter: Counter[str] = Counter()
-    for job in api.list_jobs():
-        for tag in job.get("filterTags") or []:
-            counter[tag] += 1
+def tool_top_technologies(
+    runtime: bootstrap.Runtime, limit: int = 25
+) -> dict[str, Any]:
+    """Tag frequency across the current feed."""
+    jobs = search.list_jobs(runtime.uow, runtime.board)
     return {
         "technologies": [
-            {"name": n, "postings": c} for n, c in counter.most_common(limit)
+            {"name": n, "postings": c} for n, c in search.top_technologies(jobs, limit)
         ]
     }
 
@@ -356,7 +347,9 @@ TOOLS: list[dict[str, Any]] = [
                 "cv_path": {**_STR, "description": "absolute path to a PDF CV"},
                 "confirm": {
                     **_BOOL,
-                    "description": "must be true to actually submit; the user has to agree first",
+                    "description": (
+                        "must be true to actually submit; the user has to agree first"
+                    ),
                 },
                 "name": {**_STR, "description": "applicant name (default: $SDJ_NAME)"},
                 "email": {
@@ -471,8 +464,58 @@ def _content(payload: Any, is_error: bool = False) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
-    """Route one JSON-RPC message. Returns None for notifications."""
+def _dispatch_tool(
+    request_id: Any, params: dict, runtime: bootstrap.Runtime | None
+) -> dict:
+    """Run one tool call, mapping every failure to an in-band error payload."""
+    name = params.get("name")
+    handler = HANDLERS.get(name)
+    if handler is None:
+        return _error(request_id, -32602, f"Unknown tool: {name}")
+    if runtime is None:
+        runtime = bootstrap.build_runtime()
+    try:
+        return _result(
+            request_id,
+            _content(handler(runtime, **(params.get("arguments") or {}))),
+        )
+    except CaptchaRequired as e:
+        return _result(
+            request_id,
+            _content(
+                {
+                    "error": "cloudflare_challenge",
+                    "message": (
+                        "swissdevjobs.ch returned a Cloudflare challenge. "
+                        "The user needs to run `sdj auth` in a terminal "
+                        f"and clear it at {e.url}."
+                    ),
+                },
+                is_error=True,
+            ),
+        )
+    except TypeError as e:
+        return _result(
+            request_id,
+            _content({"error": "bad_arguments", "message": str(e)}, is_error=True),
+        )
+    except Exception as e:
+        _log(f"tool {name} failed: {traceback.format_exc()}")
+        return _result(
+            request_id,
+            _content({"error": type(e).__name__, "message": str(e)}, is_error=True),
+        )
+
+
+def handle_request(
+    message: dict[str, Any], runtime: bootstrap.Runtime | None = None
+) -> dict[str, Any] | None:
+    """Route one JSON-RPC message. Returns None for notifications.
+
+    ``runtime`` is the injection seam: tests pass a fake-board runtime here;
+    production leaves it None and gets the real one, built lazily so that
+    initialize/tools-list never touch the network or the database.
+    """
     method = message.get("method")
     request_id = message.get("id")
     params = message.get("params") or {}
@@ -485,8 +528,9 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": _version()},
                 "instructions": (
-                    "Search and apply to Swiss developer jobs. Every posting carries a "
-                    "published salary range. Applying is irreversible: call apply_to_job "
+                    "Search and apply to Swiss developer jobs. Every posting "
+                    "carries a published salary range. Applying is irreversible: "
+                    "call apply_to_job "
                     "without confirm first, show the user what would be sent, and only "
                     "re-call with confirm=true once they have agreed."
                 ),
@@ -501,39 +545,7 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
         return _result(request_id, {"tools": TOOL_SPECS})
 
     if method == "tools/call":
-        name = params.get("name")
-        handler = HANDLERS.get(name)
-        if handler is None:
-            return _error(request_id, -32602, f"Unknown tool: {name}")
-        try:
-            return _result(
-                request_id, _content(handler(**(params.get("arguments") or {})))
-            )
-        except api.CaptchaRequired as e:
-            return _result(
-                request_id,
-                _content(
-                    {
-                        "error": "cloudflare_challenge",
-                        "message": (
-                            "swissdevjobs.ch returned a Cloudflare challenge. The user needs to "
-                            f"run `sdj auth` in a terminal and clear it at {e.url}."
-                        ),
-                    },
-                    is_error=True,
-                ),
-            )
-        except TypeError as e:
-            return _result(
-                request_id,
-                _content({"error": "bad_arguments", "message": str(e)}, is_error=True),
-            )
-        except Exception as e:
-            _log(f"tool {name} failed: {traceback.format_exc()}")
-            return _result(
-                request_id,
-                _content({"error": type(e).__name__, "message": str(e)}, is_error=True),
-            )
+        return _dispatch_tool(request_id, params, runtime)
 
     if method in ("resources/list", "prompts/list"):
         return _result(request_id, {"resources": [], "prompts": []})
@@ -545,7 +557,7 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _version() -> str:
-    from . import __version__
+    from swissdevjobs_cli import __version__
 
     return __version__
 
@@ -555,6 +567,7 @@ def serve(stdin=None, stdout=None) -> int:
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     _log(f"v{_version()} ready — {len(TOOLS)} tools over stdio")
+    runtime: bootstrap.Runtime | None = None
 
     for line in stdin:
         line = line.strip()
@@ -570,7 +583,9 @@ def serve(stdin=None, stdout=None) -> int:
             )
             continue
 
-        response = handle_request(message)
+        if runtime is None and message.get("method") == "tools/call":
+            runtime = bootstrap.build_runtime()
+        response = handle_request(message, runtime)
         if response is not None:
             print(json.dumps(response, ensure_ascii=False), file=stdout, flush=True)
 
@@ -579,6 +594,7 @@ def serve(stdin=None, stdout=None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Console-script entry point."""
     try:
         return serve()
     except KeyboardInterrupt:
