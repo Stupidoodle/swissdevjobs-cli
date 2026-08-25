@@ -1,12 +1,22 @@
 ---
 name: swissdevjobs
-description: Search swissdevjobs.ch and help the user apply to roles — handles the site's native apply form, direct-email postings, and third-party ATS postings (driven with a browser MCP). Trigger when the user asks to find, filter, review, or apply to Swiss dev/IT jobs, or mentions swissdevjobs.ch.
+description: Search eight job boards across seven countries — the salary-transparent devitjobs family plus jobs.ch and jobup.ch (all Swiss industries) — and help the user apply. Handles the native apply form, direct-email postings, and third-party ATS postings (driven with a browser MCP). Trigger when the user asks to find, filter, review, or apply to jobs in those countries, or mentions swissdevjobs.ch or jobs.ch.
 ---
 
 # swissdevjobs skill
 
-Drives the `swissdevjobs-cli` tool to search, inspect, and apply to Swiss
-dev/IT jobs from swissdevjobs.ch.
+Drives the `swissdevjobs-cli` tool to search, inspect, and apply across two
+platforms: the all-IT devitjobs family (swissdevjobs.ch, germantechjobs.de,
+devitjobs.uk/.com/.nl/.fr — salary always published) and JobCloud (jobs.ch,
+jobup.ch — every Swiss industry, ~50k postings, no salary data).
+
+**jobs.ch/jobup.ch are search-driven**: without a query they only return
+their newest postings, so always pass the user's actual search terms
+(`sdj list "<terms>"`), and add `--category it` to keep those two boards in
+tech. Board selectors take a country code (`--country ch` = all three Swiss
+boards) or one board id (`--country jobsch`). Their postings have **no
+native apply** — `direct-apply` answers `no_native_apply` with the real ATS
+URL; follow browser mode.
 
 **Prefer the MCP server when it is connected.** `swissdevjobs-cli` also ships
 an MCP server exposing `search_jobs`, `get_job`, `apply_to_job`,
@@ -93,9 +103,10 @@ Submits through the site's own apply form (`POST /api/jobApply`, multipart).
 motivation letter must not contain `<` or `>` — the site rejects them.
 
 `direct-apply` refuses with exit code 2 when the posting is syndicated from an
-aggregator, or when it merely links out to the company's own ATS. In both cases
-the submission would be accepted by the endpoint but never reach the company,
-so the command routes you to the ATS URL instead. Follow the browser mode.
+aggregator, when it merely links out to the company's own ATS, or always on
+jobs.ch/jobup.ch (`no_native_apply` — the platform has no native apply
+endpoint). In every case the command routes you to the ATS URL instead.
+Follow the browser mode.
 
 ### mode == "email"
 

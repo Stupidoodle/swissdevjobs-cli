@@ -11,6 +11,11 @@ they need hands-on verification against the real site. What genuinely helps:
 the board's URL, which country it covers, and anything you know about how
 its apply flow works.
 
+If you want to build one yourself anyway, the whole contract lives in
+[docs/adding-a-board.md](docs/adding-a-board.md) — a board is a `BoardPort`
+implementation behind its own anti-corruption layer, and everything else in
+the tool picks it up from the registry.
+
 ## Bugs and small fixes
 
 Bug reports with reproduction steps are always welcome. Small PRs (typos,

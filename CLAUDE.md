@@ -30,8 +30,10 @@ src/swissdevjobs_cli/
   adapters/
     http/                 urllib transport, cookie jar, Cloudflare detection
     boards/
-      registry.py         every Board, keyed by ISO country code
-      worldwide/devitjobs/  client.py + acl.py for the six-board family
+      registry.py         every Board, keyed by source; selectors resolve
+                          country codes OR source ids (two+ boards per country)
+      worldwide/devitjobs/   client.py + acl.py for the six-board family
+      switzerland/jobcloud/  client.py + acl.py for jobs.ch + jobup.ch
     persistence/          tables, imperative mappers, repositories, SQLite UoW
     envfile.py            .env loader — NO import-time path constants (see below)
     paths.py              eager path constants — import only from adapters
@@ -91,14 +93,35 @@ opposite**:
 
 ## Boards
 
-Six boards share one backend (the devitjobs platform): swissdevjobs.ch (ch),
-germantechjobs.de (de), devitjobs.uk (uk), devitjobs.com (us — includes
-Canada), devitjobs.nl (nl), devitjobs.fr (fr). One client + one ACL covers
-all of them; `adapters/boards/registry.py` is the single source of truth.
+Two platforms, eight boards; `adapters/boards/registry.py` is the single
+source of truth, keyed by `source` (the value in the DB `source` column).
+Selectors — `--country`, `SDJ_COUNTRIES`, the MCP `country` param — accept a
+country code (expands to every board in that country: `ch` is three boards
+now) or a source id (`jobsch`). Never key anything by country: `Runtime`
+routes by `job.board.source`.
+
+- **devitjobs** (worldwide/devitjobs/): swissdevjobs.ch, germantechjobs.de,
+  devitjobs.uk, devitjobs.com (US+CA), devitjobs.nl, devitjobs.fr. Full-feed
+  boards: one `/api/jobsLight` call mirrors the inventory; the cache serves
+  browsing for 10 minutes; native apply exists (with the deliverability
+  refusals below).
+- **jobcloud** (switzerland/jobcloud/): jobs.ch, jobup.ch. All industries,
+  `Board.search_driven=True`: the ~45k-job inventory cannot be mirrored
+  (rows hard-capped at 20/page, result window at 2,000), so every browse
+  passes the user's query server-side (`sort=date`) and the cache serves
+  RESOLUTION only (`search.resolve_jobs`) — never treat it as a browse
+  corpus. `Board.native_apply=False`: application_method is an external ATS
+  redirect or JobCloud's own authenticated form, so apply always refuses
+  with `no_native_apply` + the ATS URL. No salary data exists on the wire —
+  keep salary optional for every future board. `category-ids[]` taxonomies
+  are per board (IT root: jobs.ch 106, jobup 702; jobup 422s on jobs.ch
+  ids). Server-matched rows must skip the client-side query filter
+  (`search.query_for`) or description-only hits get dropped.
+
 A new family board is a registry entry. A new *platform* is a new folder
 under `adapters/boards/<country>/` (country-locked) or
 `adapters/boards/worldwide/` (multi-country), implementing `BoardPort`
-behind its own ACL.
+behind its own ACL — see docs/adding-a-board.md for the contract.
 
 Direct apply (`POST /api/jobApply`) only delivers when the board holds a
 forwarding channel; `service_layer/apply.undeliverable()` refuses syndicated

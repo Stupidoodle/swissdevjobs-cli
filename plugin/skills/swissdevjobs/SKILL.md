@@ -1,15 +1,24 @@
 ---
-description: Search six salary-transparent tech job boards (Switzerland, Germany, UK, US/Canada, Netherlands, France) and help the user apply. Use when the user asks to find, filter, compare, or apply to developer/IT jobs in those countries, asks what roles pay, or mentions swissdevjobs.ch or its sister boards.
+description: Search eight job boards across seven countries — six salary-transparent tech boards (Switzerland, Germany, UK, US/Canada, Netherlands, France) plus jobs.ch and jobup.ch (all Swiss industries) — and help the user apply. Use when the user asks to find, filter, compare, or apply to jobs in those countries, asks what roles pay, or mentions swissdevjobs.ch, jobs.ch, or their sister boards.
 ---
 
-# Dev jobs across 7 countries
+# Jobs across 8 boards in 7 countries
 
-The `swissdevjobs` MCP tools search the devitjobs board family —
+The `swissdevjobs` MCP tools search two platforms. The devitjobs family —
 swissdevjobs.ch (🇨🇭), germantechjobs.de (🇩🇪), devitjobs.uk (🇬🇧),
-devitjobs.com (🇺🇸🇨🇦), devitjobs.nl (🇳🇱), devitjobs.fr (🇫🇷) — where every
-posting is required to publish a salary range, so pay is a filter, not a
-guess. All boards are searched by default; pass `country` to `search_jobs`
-to narrow, and note salaries come back in each board's own currency.
+devitjobs.com (🇺🇸🇨🇦), devitjobs.nl (🇳🇱), devitjobs.fr (🇫🇷) — is all-IT and
+every posting publishes a salary range, so pay is a filter, not a guess.
+jobs.ch and jobup.ch (🇨🇭) cover **every** industry in Switzerland (~50k
+postings) but publish no salary data. All boards are searched by default;
+`country` on `search_jobs` takes a country code (`ch` = all three Swiss
+boards) or one board's id (`jobsch`), and salaries come back in each board's
+own currency.
+
+**jobs.ch/jobup.ch are search-driven**: without a `query` they only return
+their newest postings, so always pass the user's actual search terms for
+real coverage there — and pass `category: "it"` to keep those two boards in
+tech. Their rows carry no salary and usually no tech tags; that is the
+platform, not a bug.
 
 ## Tools
 
@@ -44,13 +53,15 @@ applicant identity, CV path, and a preview of the letter.
 approval from an earlier "apply to stuff for me" — each submission is its own
 decision, because it cannot be unsent.
 
-The tool also refuses two cases the site would silently swallow:
+The tool also refuses three cases the platforms cannot deliver natively:
 
 - `aggregator_posting` — the listing came from talent.com or jometer
 - `company_website_posting` — the site only links out to the company's own ATS
+- `no_native_apply` — every jobs.ch/jobup.ch posting: the platform has no
+  native apply endpoint at all
 
-Both come back with `apply_url`. Offer to open it and help fill the form in the
-browser, then record it with `mark_applied`.
+Each comes back with `apply_url`. Offer to open it and help fill the form in
+the browser, then record it with `mark_applied`.
 
 ## Writing the letter
 

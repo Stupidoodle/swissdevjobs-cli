@@ -2,14 +2,14 @@
 
 # 🇨🇭 swissdevjobs-cli
 
-**Search, filter, and apply to ~4,700 tech jobs across 7 countries — with salary data — without leaving your terminal.**
+**Search, filter, and apply across 8 job boards in 7 countries — ~4,700 tech jobs with salary data, plus all ~50,000 Swiss postings on jobs.ch & jobup.ch — without leaving your terminal.**
 
 🇨🇭 Switzerland · 🇩🇪 Germany · 🇬🇧 UK · 🇺🇸🇨🇦 US & Canada · 🇳🇱 Netherlands · 🇫🇷 France
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
-[![Boards](https://img.shields.io/badge/boards-6_boards_·_7_countries-orange.svg)](#boards)
+[![Boards](https://img.shields.io/badge/boards-8_boards_·_7_countries-orange.svg)](#boards)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2.svg)](#install)
 [![MCP](https://img.shields.io/badge/MCP-server%20included-6E56CF.svg)](#mcp-server)
 [![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
@@ -21,8 +21,10 @@
 Every posting on [swissdevjobs.ch](https://swissdevjobs.ch) — and its five sister
 boards covering Germany, the UK, the US & Canada, the Netherlands, and France — is
 required to publish a salary range. That makes them the rare job boards where you can
-filter by pay before you click. This CLI puts all six feeds in your shell —
-searchable, sortable, scriptable, and JSON-first so an LLM agent can drive it.
+filter by pay before you click. Since v0.5 the tool also searches
+[jobs.ch](https://www.jobs.ch) and [jobup.ch](https://www.jobup.ch) — Switzerland's
+two biggest boards, every industry, ~50,000 postings. One search, eight boards,
+JSON-first so an LLM agent can drive it.
 
 It also remembers what you've already applied to, across every board, so the same
 job never shows up twice.
@@ -31,8 +33,8 @@ job never shows up twice.
 $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
 14 shown · 14 match filters · 4681 in feed · 3 hidden (already applied)
 ----------------------------------------------------------------------------------------
-686f2a1c…  ch   p=2026-08-19 a=2026-08-22  Senior Platform Engineer   Acme AG      Zurich   CHF 145'000–170'000  remote  Kubernetes, Go, Terraform
-6a8caf89…  de   p=2026-08-24               Senior DevOps Engineer     Beispiel AG  Berlin   EUR 95'000–115'000   remote  Kubernetes, AWS, Python
+686f2a1c…  swissdevjobs    p=2026-08-19 a=2026-08-22  Senior Platform Engineer   Acme AG      Zurich   CHF 145'000–170'000  remote  Kubernetes, Go, Terraform
+6a8caf89…  germantechjobs  p=2026-08-24               Senior DevOps Engineer     Beispiel AG  Berlin   EUR 95'000–115'000   remote  Kubernetes, AWS, Python
 ```
 
 ## Contents
@@ -48,7 +50,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
 
 | | |
 |---|---|
-| 🌍 **Six boards, one tool** | Switzerland, Germany, UK, US/Canada, Netherlands, France — same backend family, one search, per-board currencies |
+| 🌍 **Eight boards, one tool** | The all-IT devitjobs family across six countries, plus jobs.ch & jobup.ch for every industry in Switzerland — one search, per-board currencies |
 | 💰 **Salary is a first-class filter** | `--min-salary 130000` — no more opening 40 tabs to find the range |
 | 📅 **Real posting dates** | The site re-stamps `activeFrom` when it bumps a listing. This decodes the true creation time from the MongoDB ObjectId, so a "new" job that's actually four months old can't fool you |
 | 🧠 **Remembers where you applied** | Local SQLite. Applied jobs vanish from `list` automatically |
@@ -105,29 +107,48 @@ Installs two equivalent binaries: **`sdj`** and **`swissdevjobs`**. Python 3.9+.
 
 ## Boards
 
-Six boards, one backend, one tool. `swissdevjobs.ch`'s operator runs the same
-platform in five more countries — identical API, identical apply flow — so one
-client covers all of them:
+Two platforms, eight boards, one tool. The devitjobs family shares one
+backend across six countries — identical API, identical apply flow — and the
+JobCloud platform (jobs.ch, jobup.ch) covers **every** industry in
+Switzerland:
 
-| | Board | Country | Currency | Direct apply |
-|---|---|---|---|---|
-| 🇨🇭 | [swissdevjobs.ch](https://swissdevjobs.ch) | Switzerland | CHF | ✅ |
-| 🇩🇪 | [germantechjobs.de](https://germantechjobs.de) | Germany | EUR | ✅ |
-| 🇬🇧 | [devitjobs.uk](https://devitjobs.uk) | United Kingdom | GBP | ✅ |
-| 🇺🇸🇨🇦 | [devitjobs.com](https://devitjobs.com) | US & Canada | USD | ✅ |
-| 🇳🇱 | [devitjobs.nl](https://devitjobs.nl) | Netherlands | EUR | ✅ |
-| 🇫🇷 | [devitjobs.fr](https://devitjobs.fr) | France | EUR | ✅ |
+| | Board | Country | Scope | Currency | Salary data | Direct apply |
+|---|---|---|---|---|---|---|
+| 🇨🇭 | [swissdevjobs.ch](https://swissdevjobs.ch) | Switzerland | IT | CHF | always | ✅ |
+| 🇩🇪 | [germantechjobs.de](https://germantechjobs.de) | Germany | IT | EUR | always | ✅ |
+| 🇬🇧 | [devitjobs.uk](https://devitjobs.uk) | United Kingdom | IT | GBP | always | ✅ |
+| 🇺🇸🇨🇦 | [devitjobs.com](https://devitjobs.com) | US & Canada | IT | USD | always | ✅ |
+| 🇳🇱 | [devitjobs.nl](https://devitjobs.nl) | Netherlands | IT | EUR | always | ✅ |
+| 🇫🇷 | [devitjobs.fr](https://devitjobs.fr) | France | IT | EUR | always | ✅ |
+| 🇨🇭 | [jobs.ch](https://www.jobs.ch) | Switzerland | **all industries** | CHF | none | 🌐 via ATS |
+| 🇨🇭 | [jobup.ch](https://www.jobup.ch) | Switzerland (Romandie) | **all industries** | CHF | none | 🌐 via ATS |
 
-All boards are searched by default. Narrow per command with `--country`, or
-persist a subset:
+All boards are searched by default. A selector is a country code (every board
+there) or a board id (just that one):
 
 ```sh
 sdj list --country de --country uk        # just Germany + UK, this once
-sdj config --countries ch,de              # persist: only search CH + DE
+sdj list --country jobsch                 # just jobs.ch
+sdj config --countries ch,de              # persist: all CH boards + Germany
+sdj config --countries swissdevjobs       # persist: one board only
 sdj config --countries all                # back to everything
 ```
 
-Native postings on every board publish a salary range. Syndicated listings
+**jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
+mirrored (the API caps at 20 rows per page and 2,000 results per query), so
+they answer your query server-side, newest first — pass free text for real
+coverage, and `--category it` to stay in tech:
+
+```sh
+sdj list "pflegefachfrau" --country jobsch      # any industry, server-side search
+sdj list "python" --country ch --category it    # CH tech across all three boards
+```
+
+They publish no salary data (rendered honestly as `—`) and have **no native
+apply** — every posting routes to the company's own ATS, so `direct-apply`
+refuses with the real apply URL instead of pretending.
+
+Native postings on every devitjobs board publish a salary range. Syndicated listings
 (marked `isPartner` by the boards — the majority outside Switzerland) sometimes
 carry no range or a single-point figure; the tool renders those honestly and
 **refuses to native-apply to them**, handing you the real ATS URL instead —
@@ -156,6 +177,8 @@ SDJ_EMAIL="you@example.com"
 SDJ_CV="/absolute/path/to/cv.pdf"
 
 # Optional: which boards to search (default: all)
+# Country codes and/or board ids: ch, de, uk, us, nl, fr,
+# swissdevjobs, germantechjobs, devitjobs-*, jobsch, jobup
 # SDJ_COUNTRIES=ch,de
 ```
 
@@ -205,6 +228,7 @@ handy if you keep a separate identity per job search.
 | `SDJ_CONFIG_DIR` | override `~/.config/swissdevjobs-cli` (cookie jar, `.env`) |
 | `SDJ_CACHE_DIR` | override `~/.cache/swissdevjobs-cli` (SQLite database) |
 | `SDJ_APPLICATIONS_LOG` | markdown application log to import on first run |
+| `SDJ_JOBCLOUD_PAGES` | pages fetched per jobs.ch/jobup.ch search (default 5 → 100 rows/board) |
 
 </details>
 
@@ -260,7 +284,11 @@ sdj open acme                                       # launch the posting
 sdj tech --limit 20                                 # what the market wants
 ```
 
-`list` columns: **id · dates · title · company · city · salary · workplace · tags**
+`list` columns: **id · board · dates · title · company · city · salary · workplace · tags**
+
+On jobs.ch/jobup.ch rows the salary column reads `—` (the platform publishes
+none) and tags are usually empty — their coverage comes from server-side
+`query` search, not client-side tag filters.
 
 The date column carries two values, and the difference matters:
 
@@ -355,8 +383,14 @@ That happens in two cases:
    company's own ATS. `emailAddressForApplications` is `null`, so there is nothing to
    forward to.
 
-In both cases the CLI exits **2** and hands you the real apply URL rather than letting
-you believe you applied. `--force` overrides if you disagree.
+A third case can't even pretend: **jobs.ch and jobup.ch have no native apply
+endpoint at all** — every posting routes to the company's own application
+flow, so `direct-apply` there always answers `no_native_apply` with the ATS
+URL.
+
+In every case the CLI exits **2** and hands you the real apply URL rather than
+letting you believe you applied. `--force` overrides the first two if you
+disagree.
 
 ```console
 $ sdj direct-apply some-workday-job --json
@@ -383,7 +417,8 @@ $ sdj direct-apply some-workday-job --json
 
 | flag | effect |
 |---|---|
-| `--country ch` *(repeatable)* | which boards to search; defaults to your enabled set |
+| `--country ch` *(repeatable)* | board selector — a country code (`ch` = all three Swiss boards) or a board id (`jobsch`); defaults to your enabled set |
+| `--category it` | narrow the all-industry boards to one category; devitjobs boards are all-IT already |
 | `--tech X` *(repeatable)* | match **any** listed tag; add `--tech-all` to require all of them |
 | `--location Zurich` | substring match on city |
 | `--remote` / `--onsite` | remote+hybrid only / exclude remote |
@@ -523,8 +558,9 @@ flowchart TB
         TRACK["tracking"]
     end
     subgraph AD["adapters"]
-        REG["boards/registry<br/>6 boards by country"]
+        REG["boards/registry<br/>8 boards by source"]
         DEVIT["boards/worldwide/devitjobs<br/>client + ACL"]
+        JC["boards/switzerland/jobcloud<br/>client + ACL"]
         HTTP["http/client<br/>urllib, cookies, CF detection"]
         PERS["persistence<br/>mappers, repos, SQLite UoW"]
     end
@@ -541,17 +577,20 @@ flowchart TB
     APPLY --> PORTS
     TRACK --> PORTS
     DEVIT -.implements.-> PORTS
+    JC -.implements.-> PORTS
     PERS -.implements.-> PORTS
     DEVIT --> HTTP
+    JC --> HTTP
     DEVIT --> MODEL
+    JC --> MODEL
     PERS --> SQL[("~/.cache/…/swissdevjobs.db")]
-    HTTP --> NET(["6 boards, 7 countries"])
+    HTTP --> NET(["8 boards, 7 countries"])
 
     classDef mod fill:#dbe7ff,stroke:#2a5db0,color:#12233f
     classDef ext fill:#ffe9b8,stroke:#b07d1a,color:#4a3308
     classDef store fill:#c7f0d8,stroke:#1a7f45,color:#0b3d22
 
-    class CLI,MCP,SEARCH,APPLY,TRACK,REG,DEVIT,HTTP,PERS,MODEL,PORTS mod
+    class CLI,MCP,SEARCH,APPLY,TRACK,REG,DEVIT,JC,HTTP,PERS,MODEL,PORTS mod
     class NET ext
     class SQL store
 ```
@@ -608,6 +647,17 @@ No auth, no API key on the read endpoints. The same surface exists on every
 board of the family. Responses cached in SQLite per board — **10 min** for
 the list, **1 h** for detail.
 
+The JobCloud platform (jobs.ch, jobup.ch) exposes a different, equally open
+surface — shared by both boards, each with its own category taxonomy:
+
+| endpoint | purpose |
+|---|---|
+| `GET /api/v1/public/search` | query, `rows` (≤20), `page` (≤2,000 results), `sort`, `category-ids[]` |
+| `GET /api/v1/public/search/job/{id}` | full detail incl. apply method and ATS URL |
+
+Search-driven boards always ask the server; their SQLite rows exist so `show`
+and `apply` can resolve what a past search surfaced.
+
 ### The database
 
 ```mermaid
@@ -650,8 +700,9 @@ per board (`UNIQUE(source, job_url)`).
 
 ## Cloudflare
 
-All six boards sit behind Cloudflare. Ordinary use sails through; bursts and
-datacenter IPs can trip a managed challenge.
+The six devitjobs boards sit behind Cloudflare (jobs.ch/jobup.ch run AWS WAF
+instead, which has not challenged API traffic so far). Ordinary use sails
+through; bursts and datacenter IPs can trip a managed challenge.
 
 **There is no automated solver here, by design.** A headless client can't run the JS
 challenge, and shipping something that tried would be both fragile and rude. Instead
@@ -698,8 +749,9 @@ src/swissdevjobs_cli/
   adapters/
     http/            urllib transport, cookie jar, Cloudflare detection
     boards/
-      registry.py    Every board, keyed by ISO country code
+      registry.py    Every board, keyed by source; selectors resolve country or board id
       worldwide/devitjobs/   Client + anti-corruption layer for the 6-board family
+      switzerland/jobcloud/  Client + ACL for jobs.ch + jobup.ch (search-driven)
     persistence/     Schema, imperative mappers, repositories, SQLite UnitOfWork
     envfile.py       Stdlib .env loading with shell-wins precedence
   service_layer/     Use cases: search, apply, tracking, config
@@ -708,7 +760,7 @@ src/swissdevjobs_cli/
 skill/SKILL.md       Standalone Claude Code skill
 plugin/              Claude Code plugin: manifest, .mcp.json, bundled skill
 .claude-plugin/      Marketplace manifest, so the repo installs itself
-tests/               172 offline tests mirroring src — fakes per port, no mocks,
+tests/               210 offline tests mirroring src — fakes per port, no mocks,
                      ast architecture checks, 90% coverage gate; opt-in live lane
 ```
 
@@ -718,8 +770,8 @@ tests/               172 offline tests mirroring src — fakes per port, no mock
 
 ```sh
 make install    # uv sync
-make check      # ruff + ty + import-linter + 172 tests with a 90% coverage gate
-make test-live  # optional: read-only smoke against all six real boards
+make check      # ruff + ty + import-linter + 210 tests with a 90% coverage gate
+make test-live  # optional: read-only smoke against all eight real boards
 ```
 
 CI runs the same gate on Python 3.9 and 3.14, and starts the MCP server to
