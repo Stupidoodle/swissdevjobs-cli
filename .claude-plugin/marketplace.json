@@ -11,7 +11,7 @@
       "displayName": "Swiss Dev Jobs",
       "source": "./plugin",
       "description": "Search tech jobs with published salaries across Switzerland, Germany, the UK, the US & Canada, the Netherlands, and France \u2014 then draft the letter and apply, with a confirmation gate before anything is sent.",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "author": {
         "name": "Bryan Tran",
         "url": "https://github.com/Stupidoodle"

@@ -1,6 +1,6 @@
 [project]
 name = "swissdevjobs-cli"
-version = "0.5.0"
+version = "0.5.1"
 description = "Search and apply to tech jobs across 7 countries (CH/DE/UK/US/CA/NL/FR) with salary data — CLI + MCP server, zero dependencies"
 readme = "README.md"
 requires-python = ">=3.9"
