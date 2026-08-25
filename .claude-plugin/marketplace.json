@@ -1,0 +1,27 @@
+{
+  "name": "swissdevjobs",
+  "owner": {
+    "name": "Bryan Tran",
+    "url": "https://github.com/Stupidoodle"
+  },
+  "description": "Search and apply to Swiss developer jobs with published salary data, from inside Claude Code.",
+  "plugins": [
+    {
+      "name": "swissdevjobs",
+      "displayName": "Swiss Dev Jobs",
+      "source": "./plugin",
+      "description": "Search Swiss developer jobs by salary, stack, and location — then draft the letter and apply, with a confirmation gate before anything is sent.",
+      "version": "0.3.0",
+      "author": {
+        "name": "Bryan Tran",
+        "url": "https://github.com/Stupidoodle"
+      },
+      "homepage": "https://github.com/Stupidoodle/swissdevjobs-cli",
+      "repository": "https://github.com/Stupidoodle/swissdevjobs-cli",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": ["jobs", "job-search", "switzerland", "salary", "careers"],
+      "tags": ["jobs", "switzerland", "salary", "mcp"]
+    }
+  ]
+}

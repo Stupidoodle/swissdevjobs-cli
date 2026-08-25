@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "swissdevjobs",
+  "displayName": "Swiss Dev Jobs",
+  "version": "0.3.0",
+  "description": "Search Swiss developer jobs by salary, stack, and location — then draft the letter and apply, with a confirmation gate before anything is sent.",
+  "author": {
+    "name": "Bryan Tran",
+    "url": "https://github.com/Stupidoodle"
+  },
+  "homepage": "https://github.com/Stupidoodle/swissdevjobs-cli",
+  "repository": "https://github.com/Stupidoodle/swissdevjobs-cli",
+  "license": "MIT",
+  "keywords": ["jobs", "job-search", "switzerland", "salary", "hiring", "careers"],
+  "mcpServers": "./.mcp.json",
+  "userConfig": {
+    "name": {
+      "type": "string",
+      "title": "Your full name",
+      "description": "Goes on applications you submit. Reading jobs works without it.",
+      "required": false
+    },
+    "email": {
+      "type": "string",
+      "title": "Your email address",
+      "description": "Where companies reply. Reading jobs works without it.",
+      "required": false
+    },
+    "cv_path": {
+      "type": "file",
+      "title": "Your CV (PDF)",
+      "description": "Attached to applications. You can override it per application.",
+      "required": false
+    }
+  }
+}

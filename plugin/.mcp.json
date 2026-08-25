@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "swissdevjobs": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Stupidoodle/swissdevjobs-cli@v0.3.0",
+        "swissdevjobs-mcp"
+      ],
+      "env": {
+        "SDJ_NAME": "${user_config.name}",
+        "SDJ_EMAIL": "${user_config.email}",
+        "SDJ_CV": "${user_config.cv_path}"
+      }
+    }
+  }
+}
