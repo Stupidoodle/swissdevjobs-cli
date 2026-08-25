@@ -105,10 +105,12 @@ forwarding channel; `service_layer/apply.undeliverable()` refuses syndicated
 (`isPartner`/`cpc` — the majority outside CH), aggregator, and CompanyWebsite
 postings — do not weaken it, silent black-holing of a job application is the
 worst failure this tool can have. Verified in the browser: syndicated pages
-have no native apply form, and the pages embed honeypot text telling bots to
-email a devitjobs.com address — never scrape the pages, the API is the only
-honest surface. Note the API no longer exposes `emailAddressForApplications`
-(always null since ~2026); email forwarding happens server-side.
+have no native apply form, and every page embeds a honeypot element telling
+bots to email a devitjobs.com address — invisible to humans (2px font, 2px
+height, white-on-white, aria-hidden) but present in DOM/accessibility dumps.
+Never scrape the pages; the API is the only honest surface. Note the API
+does not expose `emailAddressForApplications` (always null) — forwarding
+for Email postings happens server-side behind POST /api/jobApply.
 
 ## Parallel agent work
 
