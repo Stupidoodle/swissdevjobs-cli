@@ -1,17 +1,21 @@
 ---
-description: Search swissdevjobs.ch and help the user apply — every posting there publishes a salary range. Use when the user asks to find, filter, compare, or apply to Swiss developer/IT jobs, asks what Swiss roles pay, or mentions swissdevjobs.ch.
+description: Search six salary-transparent tech job boards (Switzerland, Germany, UK, US/Canada, Netherlands, France) and help the user apply. Use when the user asks to find, filter, compare, or apply to developer/IT jobs in those countries, asks what roles pay, or mentions swissdevjobs.ch or its sister boards.
 ---
 
-# Swiss dev jobs
+# Dev jobs across 7 countries
 
-The `swissdevjobs` MCP tools search swissdevjobs.ch, where every posting is
-required to publish a salary range — so pay is a filter, not a guess.
+The `swissdevjobs` MCP tools search the devitjobs board family —
+swissdevjobs.ch (🇨🇭), germantechjobs.de (🇩🇪), devitjobs.uk (🇬🇧),
+devitjobs.com (🇺🇸🇨🇦), devitjobs.nl (🇳🇱), devitjobs.fr (🇫🇷) — where every
+posting is required to publish a salary range, so pay is a filter, not a
+guess. All boards are searched by default; pass `country` to `search_jobs`
+to narrow, and note salaries come back in each board's own currency.
 
 ## Tools
 
 | tool | use it for |
 |---|---|
-| `search_jobs` | filter by salary, stack, city, remote, seniority, visa |
+| `search_jobs` | filter by salary, stack, city, country, remote, seniority, visa |
 | `get_job` | the full posting before you write anything |
 | `apply_to_job` | submit through the site's own form — **gated, see below** |
 | `list_applications` | what has already been sent |

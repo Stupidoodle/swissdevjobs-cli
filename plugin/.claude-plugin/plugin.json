@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "swissdevjobs",
   "displayName": "Swiss Dev Jobs",
-  "version": "0.3.0",
-  "description": "Search Swiss developer jobs by salary, stack, and location — then draft the letter and apply, with a confirmation gate before anything is sent.",
+  "version": "0.4.0",
+  "description": "Search tech jobs with published salaries across Switzerland, Germany, the UK, the US & Canada, the Netherlands, and France \u2014 then draft the letter and apply, with a confirmation gate before anything is sent.",
   "author": {
     "name": "Bryan Tran",
     "url": "https://github.com/Stupidoodle"
@@ -11,7 +11,19 @@
   "homepage": "https://github.com/Stupidoodle/swissdevjobs-cli",
   "repository": "https://github.com/Stupidoodle/swissdevjobs-cli",
   "license": "MIT",
-  "keywords": ["jobs", "job-search", "switzerland", "salary", "hiring", "careers"],
+  "keywords": [
+    "jobs",
+    "job-search",
+    "salary",
+    "hiring",
+    "careers",
+    "switzerland",
+    "germany",
+    "uk",
+    "usa",
+    "netherlands",
+    "france"
+  ],
   "mcpServers": "./.mcp.json",
   "userConfig": {
     "name": {
