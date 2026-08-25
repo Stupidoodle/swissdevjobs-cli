@@ -157,6 +157,16 @@ non-interactive context, run `sdj auth` first: it opens the site so the user can
 clear the challenge and paste the `cf_clearance` cookie, after which subsequent
 calls resume.
 
+## Tailoring the CV
+
+Per-country CV conventions live in **`cv/<country>.md`** next to this file
+(`ch`, `de`, `uk`, `us`, `nl`, `fr` — pick the posting's `country` value
+from the job row, load only that one). They cover format culture, the
+permit/work-authorization lines recruiters filter on, language rules, and
+letter register. Emit LaTeX/typst/HTML source the user can render — never
+render a PDF in-process. The user's CV content stays local; sharing
+anonymized structure is a separate, consent-gated flow.
+
 ## Rules
 
 - **Never auto-submit** an application — browser or native form — without

@@ -67,6 +67,21 @@ The tool also refuses four cases the platforms cannot deliver natively:
 Each comes back with `apply_url`. Offer to open it and help fill the form in
 the browser, then record it with `mark_applied`.
 
+## Tailoring the CV
+
+Before tailoring a CV or letter for a posting, read the country
+conventions file bundled with this skill: **`cv/<country>.md`**, where
+`<country>` is the job row's `country` value (`ch`, `de`, `uk`, `us`,
+`nl`, `fr`). Load only the country you are applying to. The files cover
+format (length, photo, tabular vs one-page), what recruiters filter on
+(permit/work-authorization lines, language levels), and letter register.
+
+- Emit **LaTeX, typst, or HTML source** the user can render — never
+  render a PDF yourself.
+- Conventions describe the market; the user's own preference wins.
+- The user's CV content stays local. Never post it anywhere — sharing
+  anonymized structure is a separate, consent-gated flow.
+
 ## Writing the letter
 
 - Match the posting's language. A German posting gets a German letter.
