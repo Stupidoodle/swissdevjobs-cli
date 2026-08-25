@@ -4,26 +4,28 @@ description: Search eight job boards across seven countries — six salary-trans
 
 # Jobs across 8 boards in 7 countries
 
-The `swissdevjobs` MCP tools search two platforms. The devitjobs family —
-swissdevjobs.ch (🇨🇭), germantechjobs.de (🇩🇪), devitjobs.uk (🇬🇧),
-devitjobs.com (🇺🇸🇨🇦), devitjobs.nl (🇳🇱), devitjobs.fr (🇫🇷) — is all-IT and
-every posting publishes a salary range, so pay is a filter, not a guess.
-jobs.ch and jobup.ch (🇨🇭) cover **every** industry in Switzerland (~50k
-postings) but publish no salary data. All boards are searched by default;
-`board` on `search_jobs` takes a board id (`jobsch`) or a country code
-(`ch` = all three Swiss boards), and salaries come back in each board's
-own currency.
+The `swissdevjobs` MCP tools search multiple job boards. **Call
+`list_boards` first when board facts matter** — per board it reports scope
+(all-IT vs all-industries), currency, whether salary data is published,
+whether it is search-driven, its category aliases, and whether it is
+enabled. All enabled boards are searched by default; `board` on
+`search_jobs` takes a board id (`jobsch`) or a country code (`ch` = every
+Swiss board).
 
-**jobs.ch/jobup.ch are search-driven**: without a `query` they only return
-their newest postings, so always pass the user's actual search terms for
-real coverage there — and pass `category: "it"` to keep those two boards in
-tech. Their rows carry no salary and usually no tech tags; that is the
-platform, not a bug.
+**Search-driven boards** (`search_driven: true` in `list_boards`): without
+a `query` they only return their newest postings — always pass the user's
+actual search terms for real coverage there, and pass a `category` alias to
+keep all-industry boards on topic. The search result carries a `note` when
+coverage was newest-only. Summary rows omit empty fields entirely and carry
+salary as numbers (`salary_from`/`salary_to` + `currency`); rows without
+them come from boards that publish no salary data — that is the platform,
+not a bug.
 
 ## Tools
 
 | tool | use it for |
 |---|---|
+| `list_boards` | board facts as data: scope, currency, salary, categories, apply capability |
 | `search_jobs` | filter by salary, stack, city, board, remote, seniority, visa |
 | `get_job` | the full posting before you write anything |
 | `apply_to_job` | submit through the site's own form — **gated, see below** |

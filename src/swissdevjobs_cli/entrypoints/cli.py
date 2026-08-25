@@ -17,7 +17,8 @@ from swissdevjobs_cli.adapters.http.client import CaptchaRequired, store_clearan
 from swissdevjobs_cli.domain.model.application import Applicant
 from swissdevjobs_cli.domain.model.job import Job, strip_html
 from swissdevjobs_cli.dto.application import as_dict_or_none
-from swissdevjobs_cli.dto.job import JobDetailDTO
+from swissdevjobs_cli.dto.board import BoardDTO
+from swissdevjobs_cli.dto.job import JobDetailDTO, JobSummaryDTO
 from swissdevjobs_cli.service_layer import apply as apply_service
 from swissdevjobs_cli.service_layer import config as config_service
 from swissdevjobs_cli.service_layer import search, tracking
@@ -121,6 +122,59 @@ def _window(filtered: list, args: argparse.Namespace, total: int):
     return filtered, page_info
 
 
+def _raw_list_payload(filtered: list, counts: dict, page_info):
+    """The pre-0.6 --json shape, byte for byte: full raw wire rows.
+
+    A flat list unless pagination was requested — kept as the --raw escape
+    hatch so existing scripts migrate by adding one flag.
+    """
+    rows = [dict(j.raw) for j in filtered]
+    if not page_info:
+        return rows
+    page, total_pages, per = page_info
+    return {
+        **counts,
+        "page": page,
+        "per_page": per,
+        "total_pages": total_pages,
+        "jobs": rows,
+    }
+
+
+def _summary_list_payload(
+    args: argparse.Namespace,
+    runtime: bootstrap.Runtime,
+    boards: list,
+    filtered: list,
+    counts: dict,
+    page_info,
+) -> dict:
+    """The 0.6 --json envelope: compact summary rows plus coverage steering."""
+    payload = {
+        **counts,
+        "returned": len(filtered),
+        "boards_searched": [b.board.source for b in boards],
+    }
+    # In-band steering survives context compaction; skill prose doesn't.
+    if not args.query and not args.category:
+        blind = [b.board.name for b in boards if b.board.search_driven]
+        if blind:
+            payload["note"] = (
+                f"{', '.join(blind)} returned newest postings only — "
+                "pass a query for coverage"
+            )
+    if page_info:
+        page, total_pages, per = page_info
+        payload["page"] = page
+        payload["per_page"] = per
+        payload["total_pages"] = total_pages
+    payload["jobs"] = [
+        JobSummaryDTO.from_domain(j, runtime.board_for(j).posting_url(j.raw)).as_dict()
+        for j in filtered
+    ]
+    return payload
+
+
 def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Search, filter, sort, and print the feed."""
     uow = runtime.uow
@@ -170,30 +224,28 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         hide_count = before - len(filtered)
 
     total_after_filters = len(filtered)
+    # --limit semantics: unset means "no cap" for the table and --raw (the
+    # pre-0.6 behavior) but 50 for --json summaries; 0 is always "no cap".
+    # An explicit --page/--per-page request must keep paginating: a default
+    # cap would win over the window in _window() and swallow page 2.
+    if args.limit is None:
+        wants_pages = args.page != 1 or args.per_page != 50
+        args.limit = 50 if (args.json and not args.raw and not wants_pages) else 0
     filtered, page_info = _window(filtered, args, total_after_filters)
 
     if args.json:
-        rows = [dict(j.raw) for j in filtered]
-        if page_info:
-            page, total_pages, per = page_info
-            print(
-                json.dumps(
-                    {
-                        "total_in_feed": len(jobs),
-                        "total_after_filters": total_after_filters,
-                        "hidden_already_applied": hide_count,
-                        "page": page,
-                        "per_page": per,
-                        "total_pages": total_pages,
-                        "jobs": rows,
-                    },
-                    indent=2,
-                    ensure_ascii=False,
-                )
-            )
+        counts = {
+            "total_in_feed": len(jobs),
+            "total_after_filters": total_after_filters,
+            "hidden_already_applied": hide_count,
+        }
+        if args.raw:
+            payload = _raw_list_payload(filtered, counts, page_info)
         else:
-            # Backward-compatible flat list when no pagination requested.
-            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            payload = _summary_list_payload(
+                args, runtime, boards, filtered, counts, page_info
+            )
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
     if not filtered:
@@ -377,6 +429,45 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         for i, q in enumerate(questions, 1):
             text = q.get("question") if isinstance(q, dict) else str(q)
             print(f"  {i}. {text}")
+    return 0
+
+
+def cmd_boards(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
+    """List every known board with its capabilities and enabled state."""
+    rows = [
+        BoardDTO.from_domain(
+            b,
+            categories=registry.categories_for(source),
+            enabled=source in runtime.enabled,
+        ).as_dict()
+        for source, b in registry.BOARDS.items()
+    ]
+    if args.json:
+        print(json.dumps({"boards": rows}, indent=2, ensure_ascii=False))
+        return 0
+
+    print(
+        f"{len(rows)} boards — select with --board <id|country>, "
+        "persist with `sdj config --boards`"
+    )
+    print("-" * 100)
+    for r in rows:
+        traits = [
+            r["scope"],
+            "salary" if r["salary_published"] else "no-salary",
+        ]
+        if r["search_driven"]:
+            traits.append("search-driven")
+        if not r["native_apply"]:
+            traits.append("no-native-apply")
+        if r["categories"]:
+            traits.append("categories: " + ", ".join(r["categories"]))
+        line = (
+            f"{r['source']:15}  {r['country']:3}  {r['name'][:18]:18}  "
+            f"{r['currency']:3}  {'enabled' if r['enabled'] else '       '}  "
+            f"{' · '.join(traits)}"
+        )
+        print(line)
     return 0
 
 
@@ -720,9 +811,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lp.add_argument(
         "--category",
-        choices=["it"],
-        help="narrow all-industry boards (jobs.ch, jobup.ch) to one category; "
-        "the devitjobs boards are all-IT already",
+        choices=registry.known_categories(),
+        help="narrow all-industry boards to one category (all-IT boards "
+        "ignore it; see `sdj boards`)",
     )
     lp.add_argument("--location", help="city substring, e.g. Zurich")
     lp.add_argument("--remote", action="store_true", help="remote or hybrid only")
@@ -745,9 +836,9 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument(
         "--limit",
         type=int,
-        default=0,
-        help="cap output length (0 = no cap, default). "
-        "Use --page/--per-page for windowed views.",
+        default=None,
+        help="cap output length; 0 = no cap. Default: no cap for the table "
+        "and --raw, 50 for --json. Use --page/--per-page for windowed views.",
     )
     lp.add_argument(
         "--page",
@@ -761,7 +852,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="page size when --page is used (default 50).",
     )
-    lp.add_argument("--json", action="store_true")
+    lp.add_argument(
+        "--json",
+        action="store_true",
+        help="summary rows in an envelope (capped at 50 unless --limit given)",
+    )
+    lp.add_argument(
+        "--raw",
+        action="store_true",
+        help="with --json: full raw wire rows in the pre-0.6 shape "
+        "(~470 tokens per row — cap with --limit)",
+    )
     lp.add_argument("--refresh", action="store_true", help="bypass cache")
     lp.add_argument(
         "--include-applied",
@@ -779,6 +880,10 @@ def build_parser() -> argparse.ArgumentParser:
     op = sub.add_parser("open", help="Open job page in your browser")
     op.add_argument("id")
     op.set_defaults(func=cmd_open)
+
+    bp = sub.add_parser("boards", help="List every board and its capabilities")
+    bp.add_argument("--json", action="store_true")
+    bp.set_defaults(func=cmd_boards)
 
     tp = sub.add_parser("tech", help="Top technology tags across current listings")
     tp.add_argument("--limit", type=int, default=40)

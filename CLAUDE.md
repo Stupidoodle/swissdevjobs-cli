@@ -90,11 +90,24 @@ opposite**:
 - **Wire shapes are frozen contracts.** `Job.raw`/`JobDetail.raw`, the DTO
   `as_dict()` outputs, and the MCP tool results are consumed by agents in
   the wild. Additive keys are fine; renames and removals are breaking.
+  Contract state since 0.6: summary rows are omit-empty (None/empty keys
+  dropped) with numeric-only salary (`salary_from`/`salary_to` +
+  `currency`, no formatted string); `sdj list --json` emits that summary
+  envelope capped at 50 by default, and `--raw` reproduces the pre-0.6 raw
+  wire rows exactly; MCP in-band error codes are stable strings
+  (`unknown_selector`, `job_not_found`, `internal_error`, …) — never
+  Python class names.
 
 ## Boards
 
 Two platforms, eight boards; `adapters/boards/registry.py` is the single
 source of truth, keyed by `source` (the value in the DB `source` column).
+Board facts surface as data through `list_boards` (MCP) / `sdj boards`
+(CLI) via `dto/board.py` — never hardcode board counts, category lists, or
+capabilities in prose or schemas: the MCP `category` enum and the CLI
+`--category` choices derive from `registry.known_categories()`, and a
+`Board` entry declares `scope` ("it" or "all-industries") and
+`salary_published` alongside `search_driven`/`native_apply`.
 Selectors — `--board` (aliases `--source`, `--country`), `SDJ_BOARDS`
 (fallback: the pre-0.5.1 `SDJ_COUNTRIES`), the MCP `board` param (deprecated
 alias `country`) — accept a source id (`jobsch`) or a country code (expands

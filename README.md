@@ -135,6 +135,23 @@ sdj config --boards swissdevjobs          # persist: one board only
 sdj config --boards all                   # back to everything
 ```
 
+`sdj boards` (and the MCP tool `list_boards`) prints all of this as data —
+no need to memorize which board does what:
+
+```console
+$ sdj boards
+8 boards — select with --board <id|country>, persist with `sdj config --boards`
+----------------------------------------------------------------------------------------------------
+swissdevjobs     ch   SwissDevJobs        CHF  enabled  it · salary
+germantechjobs   de   GermanTechJobs      EUR  enabled  it · salary
+devitjobs-uk     uk   DevITjobs UK        GBP  enabled  it · salary
+devitjobs-us     us   DevITjobs US/CA     USD  enabled  it · salary
+devitjobs-nl     nl   DevITjobs NL        EUR  enabled  it · salary
+devitjobs-fr     fr   DevITjobs FR        EUR  enabled  it · salary
+jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · categories: it
+jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · categories: it
+```
+
 **jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
 mirrored (the API caps at 20 rows per page and 2,000 results per query), so
 they answer your query server-side, newest first — pass free text for real
@@ -287,7 +304,44 @@ sdj show senior-platform-engineer-acme              # …or by slug, or a substr
 sdj show acme --json                                # machine-readable
 
 sdj open acme                                       # launch the posting
+sdj boards                                          # every board, as data
 sdj tech --limit 20                                 # what the market wants
+```
+
+`list --json` returns compact summary rows in an envelope — capped at 50
+unless you pass `--limit` (`0` = uncapped), with `boards_searched` and a
+coverage `note` when a search-driven board ran without a query. Empty fields
+are omitted and salary is numeric (`salary_from`/`salary_to` + `currency`).
+The pre-0.6 raw wire rows are still there behind `--raw`:
+
+```console
+$ sdj list "python" --board swissdevjobs --json --limit 2
+{
+  "total_in_feed": 187,
+  "total_after_filters": 28,
+  "hidden_already_applied": 3,
+  "returned": 2,
+  "boards_searched": ["swissdevjobs"],
+  "jobs": [
+    {
+      "job_id": "6a8d83d641e56340faa426c0",
+      "title": "Senior Solutions Engineer Real Estate | Data & BIM",
+      "company": "Rockstar Recruiting AG",
+      "city": "Zurich",
+      "salary_from": 110000,
+      "salary_to": 130000,
+      "currency": "CHF",
+      "workplace": "hybrid",
+      "language": "German",
+      "technologies": ["BIM", "CAFM", "Embedded", "ERP", "Mobile", "Python", "AI"],
+      "posted_at": "2026-08-25T12:00:22+00:00",
+      "country": "ch",
+      "source": "swissdevjobs",
+      "url": "https://swissdevjobs.ch/jobs/Rockstar-Recruiting-AG-Senior-Solutions-Engineer-Real-Estate--Data--BIM"
+    },
+    …
+  ]
+}
 ```
 
 `list` columns: **id · board · dates · title · company · city · salary · workplace · tags**
@@ -434,11 +488,12 @@ $ sdj direct-apply some-workday-job --json
 | `--min-salary` / `--max-salary` | per year, in the board's currency |
 | `--company` | substring match |
 | `--sort` | `posted` *(default)* · `date` · `salary` · `company` |
-| `--limit N` | hard cap on rows |
+| `--limit N` | hard cap on rows; `0` = no cap. Default: no cap for the table and `--raw`, 50 for `--json` |
 | `--page N --per-page N` | windowed output instead |
 | `--include-applied` | stop hiding jobs you've already applied to |
 | `--refresh` | bypass the cache, and bust Cloudflare's edge cache too |
-| `--json` | machine-readable |
+| `--json` | summary rows in an envelope (see [Commands](#commands)) |
+| `--raw` | with `--json`: full raw wire rows in the pre-0.6 shape |
 
 <details>
 <summary>Why <code>--refresh</code> does more than skip the local cache</summary>
@@ -491,6 +546,7 @@ Then just ask: *"find me senior Python roles in Zurich over 140k"* — or
 | tool | what it does | read-only |
 |---|---|:--:|
 | `search_jobs` | filter by pay, stack, city, country, remote, seniority, visa | ✅ |
+| `list_boards` | every board as data: scope, currency, salary, categories, apply capability | ✅ |
 | `get_job` | full posting: description, requirements, screening questions | ✅ |
 | `apply_to_job` | submit through the site's own form — **gated** | ❌ |
 | `list_applications` | everything recorded locally | ✅ |
@@ -766,7 +822,7 @@ src/swissdevjobs_cli/
 skill/SKILL.md       Standalone Claude Code skill
 plugin/              Claude Code plugin: manifest, .mcp.json, bundled skill
 .claude-plugin/      Marketplace manifest, so the repo installs itself
-tests/               210 offline tests mirroring src — fakes per port, no mocks,
+tests/               230 offline tests mirroring src — fakes per port, no mocks,
                      ast architecture checks, 90% coverage gate; opt-in live lane
 ```
 
@@ -776,7 +832,7 @@ tests/               210 offline tests mirroring src — fakes per port, no mock
 
 ```sh
 make install    # uv sync
-make check      # ruff + ty + import-linter + 210 tests with a 90% coverage gate
+make check      # ruff + ty + import-linter + 230 tests with a 90% coverage gate
 make test-live  # optional: read-only smoke against all eight real boards
 ```
 

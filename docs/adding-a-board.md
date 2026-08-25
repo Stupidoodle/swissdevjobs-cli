@@ -36,11 +36,19 @@ Board(
     search_driven=True,           # True: no full feed exists; queries pass
                                   # through server-side; cache = resolution only
     native_apply=False,           # False: apply refuses with the ATS URL
+    scope="all-industries",       # "it" (default) or "all-industries"
+    salary_published=False,       # False: the wire carries no salary data
 )
 ```
 
 Selectors resolve country codes and source ids automatically — a new board
-is immediately addressable as `--country <source>` and via its country code.
+is immediately addressable as `--board <source>` and via its country code.
+The entry IS the discovery surface: `list_boards` (MCP) and `sdj boards`
+(CLI) render it verbatim, and category aliases registered for the board
+(see `CATEGORY_IDS` in the platform client) flow into
+`registry.known_categories()`, which feeds the MCP `category` enum and the
+CLI `--category` choices. Declare the board honestly and every surface
+updates itself.
 
 ## The port
 

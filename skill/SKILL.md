@@ -19,10 +19,13 @@ native apply** — `direct-apply` answers `no_native_apply` with the real ATS
 URL; follow browser mode.
 
 **Prefer the MCP server when it is connected.** `swissdevjobs-cli` also ships
-an MCP server exposing `search_jobs`, `get_job`, `apply_to_job`,
-`list_applications`, `mark_applied` and `top_technologies`. If those tools are
-available, use them — they return structured data directly and `apply_to_job`
-carries its own confirmation gate. Fall back to the CLI below when they are not.
+an MCP server exposing `search_jobs`, `list_boards`, `get_job`,
+`apply_to_job`, `list_applications`, `mark_applied` and `top_technologies`.
+If those tools are available, use them — they return structured data directly
+and `apply_to_job` carries its own confirmation gate. Fall back to the CLI
+below when they are not. Board facts (scope, currency, salary availability,
+categories, apply capability) come from `list_boards` / `sdj boards` — ask
+the tool, don't guess.
 
 The easiest way to get them is the plugin, which bundles its own skill:
 
@@ -56,11 +59,13 @@ flags both win over the file. Without an identity from *some* source,
 
 CLI binary: `sdj` (alias `swissdevjobs`). Every command accepts `--json` for
 machine-readable output — **prefer `--json` whenever you're going to act on
-the results**, and **always cap `list --json` with `--limit`**: it prints
-full raw wire rows (~470 tokens each, thousands of rows uncapped), not the
-compact summaries the MCP server returns.
+the results**. Since 0.6, `list --json` returns compact summary rows in an
+envelope (with `boards_searched` and a coverage `note`), capped at 50 unless
+you pass `--limit` (`0` = uncapped). `--raw` restores the full wire rows
+(~470 tokens each — always cap those with `--limit`).
 
 ```sh
+sdj boards                                    # every board, as data
 sdj list --tech Python --remote --min-salary 130000 --json --limit 25
 sdj show <id|slug> --json
 sdj apply <id|slug> --json                    # surface the apply mechanism

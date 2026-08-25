@@ -36,11 +36,51 @@ def run(runtime, *argv):
 # --- list -------------------------------------------------------------------
 
 
-def test_list_json_prints_the_wire_rows(runtime, capsys):
+def test_list_json_prints_summary_rows_in_an_envelope(runtime, capsys):
     assert run(runtime, "list", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["boards_searched"] == ["swissdevjobs"]
+    row = payload["jobs"][0]
+    assert row["company"] == "Acme AG"
+    assert row["country"] == "ch"
+    assert "salary" not in row, "summary salary is numeric-only since 0.6"
+    assert row["currency"] == "CHF"
+
+
+def test_list_json_raw_keeps_the_pre_06_wire_shape(runtime, capsys):
+    assert run(runtime, "list", "--json", "--raw") == 0
     rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list), "--raw stays a flat list, not an envelope"
     assert rows[0]["company"] == "Acme AG"
-    assert rows[0]["country"] == "ch"
+    assert rows[0]["annualSalaryFrom"] == 130000
+
+
+def test_list_json_caps_at_50_by_default(runtime, board, capsys):
+    board._feed_wire = [
+        job(_id=f"62eccd7a57370f0152e4{i:04x}", jobUrl=f"role-{i}") for i in range(60)
+    ]
+    assert run(runtime, "list", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["returned"] == 50
+    assert len(payload["jobs"]) == 50
+    assert payload["total_after_filters"] == 60
+
+
+def test_boards_table_lists_the_registry(runtime, capsys):
+    assert run(runtime, "boards") == 0
+    out = capsys.readouterr().out
+    assert "jobsch" in out
+    assert "search-driven" in out
+    assert "no-native-apply" in out
+
+
+def test_boards_json_matches_the_registry(runtime, capsys):
+    assert run(runtime, "boards", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    rows = {r["source"]: r for r in payload["boards"]}
+    assert rows["jobup"]["native_apply"] is False
+    assert rows["jobup"]["categories"] == ["it"]
+    assert rows["swissdevjobs"]["enabled"] is True
 
 
 def test_list_table_has_a_header_and_the_country_column(runtime, capsys):
@@ -299,8 +339,9 @@ def test_country_flag_narrows_the_boards(fresh_uow, capsys):
         enabled=["swissdevjobs", "germantechjobs"],
     )
     assert run(runtime, "list", "--country", "de", "--json") == 0
-    rows = json.loads(capsys.readouterr().out)
-    assert {r["country"] for r in rows} == {"de"}
+    payload = json.loads(capsys.readouterr().out)
+    assert {r["country"] for r in payload["jobs"]} == {"de"}
+    assert payload["boards_searched"] == ["germantechjobs"]
 
 
 # --- plumbing ---------------------------------------------------------------

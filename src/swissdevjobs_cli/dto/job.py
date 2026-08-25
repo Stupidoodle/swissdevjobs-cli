@@ -11,15 +11,21 @@ from swissdevjobs_cli.service_layer.apply import fallback_mode
 
 @dataclass(frozen=True)
 class JobSummaryDTO:
-    """One compact search row. Full descriptions stay in the detail payload."""
+    """One compact search row. Full descriptions stay in the detail payload.
+
+    Since 0.6.0 the row is omit-empty: keys whose value is None or an empty
+    list are dropped (all-industry boards would otherwise ship six dead
+    fields per row), and salary is numeric-only — ``salary_from``/
+    ``salary_to`` plus ``currency``, no formatted string.
+    """
 
     job_id: str | None
     title: str | None
     company: str | None
     city: str | None
-    salary: str
     salary_from: int | None
     salary_to: int | None
+    currency: str
     workplace: str | None
     language: str | None
     technologies: list[str]
@@ -39,9 +45,9 @@ class JobSummaryDTO:
             title=raw.get("name"),
             company=raw.get("company"),
             city=raw.get("actualCity") or raw.get("cityCategory"),
-            salary=job.salary.format(),
             salary_from=raw.get("annualSalaryFrom"),
             salary_to=raw.get("annualSalaryTo"),
+            currency=job.board.currency,
             workplace=raw.get("workplace"),
             language=raw.get("language"),
             technologies=list(raw.get("filterTags") or [])[:8],
@@ -50,15 +56,20 @@ class JobSummaryDTO:
         )
 
     def as_dict(self) -> dict[str, Any]:
-        """The frozen wire shape, key order included."""
-        return {
+        """The frozen wire shape, key order included; empty keys omitted."""
+        row = {
             "job_id": self.job_id,
             "title": self.title,
             "company": self.company,
             "city": self.city,
-            "salary": self.salary,
             "salary_from": self.salary_from,
             "salary_to": self.salary_to,
+            # A bare number is ambiguous across mixed-country result sets.
+            "currency": (
+                self.currency
+                if self.salary_from is not None or self.salary_to is not None
+                else None
+            ),
             "workplace": self.workplace,
             "language": self.language,
             "technologies": self.technologies,
@@ -67,6 +78,7 @@ class JobSummaryDTO:
             "source": self.source,
             "url": self.url,
         }
+        return {k: v for k, v in row.items() if v not in (None, [], "")}
 
 
 @dataclass(frozen=True)

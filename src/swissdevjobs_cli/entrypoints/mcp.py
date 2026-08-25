@@ -27,6 +27,7 @@ from swissdevjobs_cli.adapters.http.client import CaptchaRequired
 from swissdevjobs_cli.domain.model.job import Job
 from swissdevjobs_cli.dto.application import as_dict_or_none
 from swissdevjobs_cli.dto.apply_preview import WouldSubmitDTO
+from swissdevjobs_cli.dto.board import BoardDTO
 from swissdevjobs_cli.dto.job import JobDetailDTO, JobSummaryDTO
 from swissdevjobs_cli.service_layer import apply as apply_service
 from swissdevjobs_cli.service_layer import config as config_service
@@ -47,6 +48,19 @@ def _log(message: str) -> None:
     print(f"[{SERVER_NAME}] {message}", file=sys.stderr, flush=True)
 
 
+class ToolFault(Exception):
+    """A tool failure with a stable, documented error code.
+
+    The in-band ``error`` field is part of the wire contract — agents branch
+    on it — so it must never leak a Python class name.
+    """
+
+    def __init__(self, code: str, message: str):
+        """A machine-stable code plus the human-readable explanation."""
+        super().__init__(message)
+        self.code = code
+
+
 # --- tool implementations ---------------------------------------------------
 
 
@@ -61,9 +75,10 @@ def _boards_for(runtime: bootstrap.Runtime, country: str) -> list:
     if country and country != "all":
         token = country.strip().lower()
         if token not in registry.known_selectors():
-            raise ValueError(
+            raise ToolFault(
+                "unknown_selector",
                 f"Unknown board selector {country!r}; "
-                f"known: {', '.join(registry.known_selectors())}"
+                f"known: {', '.join(registry.known_selectors())}",
             )
         return [
             runtime.boards[s]
@@ -99,9 +114,8 @@ def tool_search_jobs(
     alias (``board`` wins when both are passed).
     """
     uow = runtime.uow
-    jobs = search.list_jobs(
-        uow, _boards_for(runtime, board or country), query=query, category=category
-    )
+    board_clients = _boards_for(runtime, board or country)
+    jobs = search.list_jobs(uow, board_clients, query=query, category=category)
     hits = [
         j
         for j in jobs
@@ -130,13 +144,23 @@ def tool_search_jobs(
 
     total = len(hits)
     limit = max(1, min(limit, 100))
-    return {
+    result: dict[str, Any] = {
         "total_in_feed": len(jobs),
         "total_matching": total,
         "hidden_already_applied": hidden,
         "returned": min(limit, total),
-        "jobs": [_summarize(runtime, j) for j in hits[:limit]],
+        "boards_searched": [b.board.source for b in board_clients],
     }
+    # In-band steering survives context compaction; skill prose doesn't.
+    if not query and not category:
+        blind = [b.board.name for b in board_clients if b.board.search_driven]
+        if blind:
+            result["note"] = (
+                f"{', '.join(blind)} returned newest postings only — "
+                "pass query for coverage"
+            )
+    result["jobs"] = [_summarize(runtime, j) for j in hits[:limit]]
+    return result
 
 
 def tool_get_job(runtime: bootstrap.Runtime, job_id: str) -> dict[str, Any]:
@@ -145,9 +169,10 @@ def tool_get_job(runtime: bootstrap.Runtime, job_id: str) -> dict[str, Any]:
     jobs = search.resolve_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
-        raise ValueError(
+        raise ToolFault(
+            "job_not_found",
             f"No job matching {job_id!r} in the local cache — "
-            "run search_jobs first; only listed jobs can be fetched"
+            "run search_jobs first; only listed jobs can be fetched",
         )
     board = runtime.board_for(job)
     detail = search.get_detail(uow, board, str(job.id))
@@ -175,7 +200,7 @@ def tool_apply_to_job(
     jobs = search.resolve_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
-        raise ValueError(f"No job matching {job_id!r}")
+        raise ToolFault("job_not_found", f"No job matching {job_id!r}")
 
     board = runtime.board_for(job)
     detail = search.get_detail(uow, board, str(job.id))
@@ -257,7 +282,7 @@ def tool_mark_applied(
     jobs = search.resolve_jobs(uow, runtime.enabled_boards())
     job = search.resolve(jobs, job_id)
     if not job:
-        raise ValueError(f"No job matching {job_id!r}")
+        raise ToolFault("job_not_found", f"No job matching {job_id!r}")
     detail = search.get_detail(uow, runtime.board_for(job), str(job.id))
     return tracking.mark_applied(
         uow,
@@ -268,6 +293,20 @@ def tool_mark_applied(
         notes=notes,
         source=detail.board.source,
     ).as_dict()
+
+
+def tool_list_boards(runtime: bootstrap.Runtime) -> dict[str, Any]:
+    """Board facts as data — the discovery call the skills point at."""
+    return {
+        "boards": [
+            BoardDTO.from_domain(
+                b,
+                categories=registry.categories_for(source),
+                enabled=source in runtime.enabled,
+            ).as_dict()
+            for source, b in registry.BOARDS.items()
+        ]
+    }
 
 
 def tool_top_technologies(
@@ -294,13 +333,12 @@ TOOLS: list[dict[str, Any]] = [
         "name": "search_jobs",
         "title": _SEARCH_TITLE,
         "description": (
-            "Search the devitjobs board family (Switzerland, Germany, UK, "
-            "US/Canada, Netherlands, France — all-IT, salary published) plus "
-            "jobs.ch and jobup.ch (Switzerland, ALL industries, query-driven: "
-            "pass `query` for real coverage; without one they return only "
-            "their newest postings). Jobs already applied to are hidden "
-            "unless include_applied is true. Returns compact rows; call "
-            "get_job for the full posting."
+            "Search every enabled job board and return compact rows (call "
+            "get_job for the full posting). Boards differ — call list_boards "
+            "for each board's scope, salary availability, and categories. "
+            "Search-driven boards return only their newest postings without "
+            "a query, so pass the user's real search terms. Jobs already "
+            "applied to are hidden unless include_applied is true."
         ),
         "inputSchema": {
             "type": "object",
@@ -351,21 +389,19 @@ TOOLS: list[dict[str, Any]] = [
                 },
                 "country": {
                     **_STR,
-                    "enum": ["all", *registry.known_selectors()],
                     "description": "deprecated alias of `board`",
                 },
                 "category": {
                     **_STR,
-                    "enum": ["it"],
+                    "enum": registry.known_categories(),
                     "description": (
-                        "narrow the all-industry boards (jobs.ch, jobup.ch) "
-                        "to one category; devitjobs boards are all-IT already"
+                        "narrow all-industry boards to one category "
+                        "(all-IT boards ignore it; see list_boards)"
                     ),
                 },
             },
         },
         "annotations": {
-            "title": _SEARCH_TITLE,
             "readOnlyHint": True,
             "openWorldHint": True,
         },
@@ -373,6 +409,24 @@ TOOLS: list[dict[str, Any]] = [
         # This raises the per-tool ceiling so max-limit searches stay quiet.
         "_meta": {"anthropic/maxResultSizeChars": 200000},
         "handler": tool_search_jobs,
+    },
+    {
+        "name": "list_boards",
+        "title": "List the available job boards",
+        "description": (
+            "Every board this server can search, as data: scope (all-IT vs "
+            "all-industries), currency, whether salary data is published, "
+            "whether it is search-driven (pass query for real coverage), "
+            "whether it has native apply (native_apply=false means driving "
+            "the posting's ATS in a browser), its category aliases, and "
+            "whether it is enabled in the current config."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+        "annotations": {
+            "readOnlyHint": True,
+            "openWorldHint": False,
+        },
+        "handler": tool_list_boards,
     },
     {
         "name": "get_job",
@@ -389,7 +443,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["job_id"],
         },
         "annotations": {
-            "title": "Read a full posting",
             "readOnlyHint": True,
             "openWorldHint": True,
         },
@@ -438,7 +491,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["job_id", "motivation", "cv_path"],
         },
         "annotations": {
-            "title": "Submit an application",
             "readOnlyHint": False,
             # destructiveHint deliberately OMITTED: the spec default is
             # true, and an irreversible outward submission should get every
@@ -458,7 +510,6 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {"limit": {**_INT, "description": "max rows (default 100)"}},
         },
         "annotations": {
-            "title": "List tracked applications",
             "readOnlyHint": True,
             "openWorldHint": False,
         },
@@ -482,7 +533,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["job_id", "method"],
         },
         "annotations": {
-            "title": "Record an application made elsewhere",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": True,
@@ -501,7 +551,6 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
         "annotations": {
-            "title": "Most-requested technologies",
             "readOnlyHint": True,
             "openWorldHint": True,
         },
@@ -606,6 +655,11 @@ def _dispatch_tool(
                 is_error=True,
             ),
         )
+    except ToolFault as e:
+        return _result(
+            request_id,
+            _content({"error": e.code, "message": str(e)}, is_error=True),
+        )
     except TypeError as e:
         return _result(
             request_id,
@@ -615,7 +669,7 @@ def _dispatch_tool(
         _log(f"tool {name} failed: {traceback.format_exc()}")
         return _result(
             request_id,
-            _content({"error": type(e).__name__, "message": str(e)}, is_error=True),
+            _content({"error": "internal_error", "message": str(e)}, is_error=True),
         )
 
 
@@ -647,16 +701,17 @@ def handle_request(
                 "serverInfo": {"name": SERVER_NAME, "version": _version()},
                 "instructions": (
                     f"Search and apply to jobs across {_N_BOARDS} boards in "
-                    f"{_N_COUNTRIES} countries: "
-                    "the devitjobs family (all-IT, salary always published) "
-                    "plus jobs.ch and jobup.ch (Switzerland, all industries — "
-                    "pass a query for real coverage, and expect no salary "
-                    "data). jobs.ch/jobup.ch postings have no native apply: "
-                    "apply_to_job returns the posting's ATS URL to drive in a "
-                    "browser instead. Applying is irreversible: call "
-                    "apply_to_job without confirm first, show the user what "
-                    "would be sent, and only re-call with confirm=true once "
-                    "they have agreed."
+                    f"{_N_COUNTRIES} countries. Call list_boards for each "
+                    "board's scope, categories, salary availability, and "
+                    "apply capability. Search-driven boards return only "
+                    "their newest postings without a query — pass the "
+                    "user's real search terms. Boards with "
+                    "native_apply=false have no native form: apply_to_job "
+                    "returns the posting's ATS URL to drive in a browser "
+                    "instead. Applying is irreversible: call apply_to_job "
+                    "without confirm first, show the user what would be "
+                    "sent, and only re-call with confirm=true once they "
+                    "have agreed."
                 ),
             },
         )

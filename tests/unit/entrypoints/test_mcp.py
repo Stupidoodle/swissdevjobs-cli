@@ -8,6 +8,7 @@ import pytest
 
 from conftest import job
 from fakes.fake_board_port import FakeBoard
+from swissdevjobs_cli.adapters.boards import registry
 from swissdevjobs_cli.adapters.http.client import CaptchaRequired
 from swissdevjobs_cli.bootstrap import Runtime
 from swissdevjobs_cli.entrypoints import mcp
@@ -140,8 +141,11 @@ def test_a_cloudflare_challenge_tells_the_user_how_to_clear_it(runtime, board):
 def test_search_returns_compact_rows(runtime):
     result = call(runtime, "search_jobs", min_salary=100000)
     assert result["total_matching"] == 1
+    assert result["boards_searched"] == ["swissdevjobs"]
     row = result["jobs"][0]
-    assert row["salary"] == "CHF 130'000–160'000"
+    assert row["salary_from"] == 130000
+    assert row["currency"] == "CHF"
+    assert "salary" not in row, "summary salary is numeric-only since 0.6"
     assert row["url"].startswith("https://swissdevjobs.ch/jobs/")
     assert "description" not in row, "full text belongs to get_job, to save context"
 
@@ -161,7 +165,7 @@ def test_get_job_returns_the_full_payload(runtime):
     assert result["description"] == "Build things"
 
 
-def test_get_job_rejects_an_unknown_id(runtime):
+def test_get_job_rejects_an_unknown_id_with_a_stable_code(runtime):
     response = mcp.handle_request(
         {
             "jsonrpc": "2.0",
@@ -172,6 +176,39 @@ def test_get_job_rejects_an_unknown_id(runtime):
         runtime,
     )
     assert response["result"]["isError"] is True
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["error"] == "job_not_found"
+
+
+def test_list_boards_reports_the_registry_as_data(runtime):
+    result = call(runtime, "list_boards")
+    rows = {r["source"]: r for r in result["boards"]}
+    assert set(rows) == set(registry.BOARDS)
+    assert rows["jobsch"]["search_driven"] is True
+    assert rows["jobsch"]["native_apply"] is False
+    assert rows["jobsch"]["salary_published"] is False
+    assert rows["jobsch"]["categories"] == ["it"]
+    assert rows["swissdevjobs"]["enabled"] is True
+    assert rows["jobup"]["enabled"] is False, "only swissdevjobs is enabled here"
+
+
+def test_a_blind_search_on_a_search_driven_board_carries_a_note(fresh_uow):
+    board = FakeBoard(feed=[job()], board=registry.BOARDS["jobsch"])
+    runtime = Runtime(boards={"jobsch": board}, uow=fresh_uow, enabled=["jobsch"])
+    blind = call(runtime, "search_jobs")
+    assert "newest postings only" in blind["note"]
+    assert "note" not in call(runtime, "search_jobs", query="python")
+
+
+def test_summary_rows_omit_empty_fields(fresh_uow):
+    wire = job(annualSalaryFrom=None, annualSalaryTo=None, workplace=None)
+    board = FakeBoard(feed=[wire])
+    runtime = Runtime(
+        boards={"swissdevjobs": board}, uow=fresh_uow, enabled=["swissdevjobs"]
+    )
+    row = call(runtime, "search_jobs")["jobs"][0]
+    for key in ("salary_from", "salary_to", "currency", "workplace"):
+        assert key not in row, f"empty {key} must be omitted, not null"
 
 
 # --- the confirmation gate --------------------------------------------------
@@ -331,7 +368,9 @@ def test_search_can_target_one_country(runtime):
     assert call(runtime, "search_jobs", country="ch")["total_matching"] == 1
 
 
-def test_search_rejects_an_unknown_country(runtime):
+def test_search_rejects_an_unknown_country_with_a_stable_code(runtime):
+    # The deprecated `country` param has no schema enum since 0.6, so a bad
+    # value sails past validation — the in-band code is what catches it.
     response = mcp.handle_request(
         {
             "jsonrpc": "2.0",
@@ -342,6 +381,19 @@ def test_search_rejects_an_unknown_country(runtime):
         runtime,
     )
     assert response["result"]["isError"] is True
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["error"] == "unknown_selector"
+    assert "jobsch" in payload["message"], "the fault must name valid selectors"
+
+
+def test_schemas_are_registry_derived_and_titles_not_duplicated():
+    spec = mcp.SPECS["search_jobs"]
+    assert "enum" not in spec["inputSchema"]["properties"]["country"]
+    category = spec["inputSchema"]["properties"]["category"]
+    assert category["enum"] == registry.known_categories()
+    for tool in mcp.TOOL_SPECS:
+        assert tool["title"]
+        assert "title" not in tool.get("annotations", {})
 
 
 def test_the_preview_names_the_board(runtime, tmp_path):

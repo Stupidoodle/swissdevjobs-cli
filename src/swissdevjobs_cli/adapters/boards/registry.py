@@ -72,6 +72,8 @@ BOARDS: dict[str, Board] = {
         source="jobsch",
         search_driven=True,
         native_apply=False,
+        scope="all-industries",
+        salary_published=False,
     ),
     "jobup": Board(
         platform="jobcloud",
@@ -82,6 +84,8 @@ BOARDS: dict[str, Board] = {
         source="jobup",
         search_driven=True,
         native_apply=False,
+        scope="all-industries",
+        salary_published=False,
     ),
 }
 
@@ -96,6 +100,25 @@ def known_selectors() -> list[str]:
     """Every token a user may select boards by: country codes and source ids."""
     countries = {b.country for b in BOARDS.values()}
     return sorted(countries | set(BOARDS))
+
+
+def categories_for(source: str) -> list[str]:
+    """The category aliases one board understands (empty for all-IT feeds)."""
+    from swissdevjobs_cli.adapters.boards.switzerland.jobcloud.client import (
+        CATEGORY_IDS,
+    )
+
+    return sorted(CATEGORY_IDS.get(source, {}))
+
+
+def known_categories() -> list[str]:
+    """Every category alias any board understands — the shared schema enum.
+
+    Derived, not hardcoded: the day a board adds a "finance" alias it must
+    appear in the MCP schema, the CLI choices, and list_boards output
+    without touching three files.
+    """
+    return sorted({c for source in BOARDS for c in categories_for(source)})
 
 
 def resolve_selectors(tokens: list[str]) -> list[str]:

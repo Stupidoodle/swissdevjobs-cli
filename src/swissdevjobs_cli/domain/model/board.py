@@ -20,6 +20,9 @@ class Board:
     local cache only ever holds what past searches surfaced.
     ``native_apply`` is False for boards without their own apply endpoint —
     applying means driving the posting's external ATS.
+    ``scope`` says what the inventory covers ("it", or "all-industries" for
+    general boards where a category filter narrows the search);
+    ``salary_published`` is False where the wire carries no salary data.
     """
 
     platform: str
@@ -30,3 +33,5 @@ class Board:
     source: str  # value stored in the applications/jobs `source` column
     search_driven: bool = False
     native_apply: bool = True
+    scope: str = "it"
+    salary_published: bool = True
