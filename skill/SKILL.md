@@ -56,10 +56,12 @@ flags both win over the file. Without an identity from *some* source,
 
 CLI binary: `sdj` (alias `swissdevjobs`). Every command accepts `--json` for
 machine-readable output — **prefer `--json` whenever you're going to act on
-the results**.
+the results**, and **always cap `list --json` with `--limit`**: it prints
+full raw wire rows (~470 tokens each, thousands of rows uncapped), not the
+compact summaries the MCP server returns.
 
 ```sh
-sdj list --tech Python --remote --min-salary 130000 --json
+sdj list --tech Python --remote --min-salary 130000 --json --limit 25
 sdj show <id|slug> --json
 sdj apply <id|slug> --json                    # surface the apply mechanism
 sdj apply <id|slug> --json --complete email   # mark as applied via email
@@ -82,7 +84,8 @@ Agent-friendly behaviour:
 
 ## Workflow: search → shortlist → apply
 
-1. **Search.** `sdj list … --json`. Already-applied jobs are filtered out.
+1. **Search.** `sdj list … --json --limit 25`. Already-applied jobs are
+   filtered out.
 2. **Check the apply route.** `sdj apply <id> --json` returns a `mode` and a
    `fallback_mode`.
 3. **Inspect.** `sdj show <id> --json` for any candidate you're unsure about.

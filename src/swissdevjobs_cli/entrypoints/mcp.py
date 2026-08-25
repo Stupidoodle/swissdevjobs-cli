@@ -35,6 +35,11 @@ from swissdevjobs_cli.service_layer import search, tracking
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "swissdevjobs"
 
+# Derived from the registry so prose can never drift from the board list.
+_N_BOARDS = len(registry.BOARDS)
+_N_COUNTRIES = len({b.country for b in registry.BOARDS.values()})
+_SEARCH_TITLE = f"Search jobs across {_N_BOARDS} boards in {_N_COUNTRIES} countries"
+
 
 def _log(message: str) -> None:
     """Diagnostics go to stderr; stdout belongs to the protocol."""
@@ -286,7 +291,7 @@ _BOOL = {"type": "boolean"}
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_jobs",
-        "title": "Search jobs across 8 boards in 7 countries",
+        "title": _SEARCH_TITLE,
         "description": (
             "Search the devitjobs board family (Switzerland, Germany, UK, "
             "US/Canada, Netherlands, France — all-IT, salary published) plus "
@@ -359,7 +364,7 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
         "annotations": {
-            "title": "Search jobs across 8 boards in 7 countries",
+            "title": _SEARCH_TITLE,
             "readOnlyHint": True,
             "openWorldHint": True,
         },
@@ -516,10 +521,12 @@ def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
 
 
 def _content(payload: Any, is_error: bool = False) -> dict[str, Any]:
+    # Compact separators on purpose: results are consumed by models, and
+    # pretty-printing costs ~19% more tokens on every tool call.
     text = (
         payload
         if isinstance(payload, str)
-        else json.dumps(payload, indent=2, ensure_ascii=False)
+        else json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     )
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
@@ -588,7 +595,8 @@ def handle_request(
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": _version()},
                 "instructions": (
-                    "Search and apply to jobs across 8 boards in 7 countries: "
+                    f"Search and apply to jobs across {_N_BOARDS} boards in "
+                    f"{_N_COUNTRIES} countries: "
                     "the devitjobs family (all-IT, salary always published) "
                     "plus jobs.ch and jobup.ch (Switzerland, all industries — "
                     "pass a query for real coverage, and expect no salary "

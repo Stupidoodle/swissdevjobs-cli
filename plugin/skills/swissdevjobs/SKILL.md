@@ -53,9 +53,11 @@ applicant identity, CV path, and a preview of the letter.
 approval from an earlier "apply to stuff for me" — each submission is its own
 decision, because it cannot be unsent.
 
-The tool also refuses three cases the platforms cannot deliver natively:
+The tool also refuses four cases the platforms cannot deliver natively:
 
-- `aggregator_posting` — the listing came from talent.com or jometer
+- `syndicated_posting` — the listing is a paid syndication (`isPartner`/`cpc`
+  flags; the majority outside Switzerland, including most talent.com jobs)
+- `aggregator_posting` — the redirect points at a known aggregator network
 - `company_website_posting` — the site only links out to the company's own ATS
 - `no_native_apply` — every jobs.ch/jobup.ch posting: the platform has no
   native apply endpoint at all

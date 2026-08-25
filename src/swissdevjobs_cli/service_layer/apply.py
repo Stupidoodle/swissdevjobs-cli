@@ -44,6 +44,11 @@ def undeliverable(detail: JobDetail) -> dict[str, Any] | None:
     # Boards without a native apply endpoint (jobs.ch, jobup.ch) can never
     # deliver a direct submission — the posting's ATS is the only channel.
     if not detail.board.native_apply:
+        where = (
+            "Open apply_url in a browser and drive the form there"
+            if detail.redirect_url
+            else "Open the posting page in a browser and follow its apply flow"
+        )
         return {
             "error": "no_native_apply",
             "next_action": "use_chrome_mcp",
@@ -53,9 +58,9 @@ def undeliverable(detail: JobDetail) -> dict[str, Any] | None:
             "company": detail.company,
             "role": detail.title,
             "message": (
-                f"USE CHROME MCP: visit {detail.redirect_url} and drive the ATS "
-                f"form. {detail.board.name} has no native apply endpoint — "
-                "every posting routes to the company's own application flow."
+                f"{detail.board.name} has no native apply endpoint — every "
+                f"posting routes to the company's own application flow. "
+                f"{where}, then record it with mark_applied / apply --complete."
             ),
         }
 
@@ -95,9 +100,9 @@ def undeliverable(detail: JobDetail) -> dict[str, Any] | None:
         "company": detail.company,
         "role": detail.title,
         "message": (
-            f"USE CHROME MCP: visit {detail.redirect_url} and drive the ATS form. "
-            f"SwissDevJobs would silently black-hole this submission because "
-            f"{why}. Override with --force if you really mean it."
+            f"Apply in a browser instead: open apply_url and drive the ATS "
+            f"form. The native form would silently black-hole this submission "
+            f"because {why}. Override with force if you really mean it."
         ),
     }
 

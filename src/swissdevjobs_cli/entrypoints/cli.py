@@ -351,7 +351,7 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
-    print(f"Apply mode: DIRECT  (fallback: {fallback.upper()})")
+    print(f"Apply mode: {payload['mode'].upper()}  (fallback: {fallback.upper()})")
     if existing:
         print(
             f"STATUS:     Already applied on {existing.applied_at} "
@@ -526,9 +526,10 @@ def _direct_apply_preflight(args, runtime, job):
         if args.json:
             print(json.dumps(refusal, indent=2))
         else:
+            url = refusal["apply_url"] or "(no redirect URL — open the posting page)"
             print(
-                f"USE CHROME MCP — visit this URL and drive the apply form:\n"
-                f"  {refusal['apply_url'] or '(no redirect URL on posting)'}\n"
+                f"Apply in a browser — drive the form at:\n"
+                f"  {url}\n"
                 f"({refusal['message']})",
                 file=sys.stderr,
             )
@@ -685,11 +686,13 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """The full argparse tree; kept in one place so --help shows everything."""
+    n_boards = len(registry.BOARDS)
+    n_countries = len({b.country for b in registry.BOARDS.values()})
     p = argparse.ArgumentParser(
         prog="swissdevjobs",
-        description="Job search CLI — 8 boards, 7 countries: the devitjobs "
-        "family (all-IT, salary published) plus jobs.ch and jobup.ch "
-        "(all industries).",
+        description=f"Job search CLI — {n_boards} boards, {n_countries} "
+        "countries: the devitjobs family (all-IT, salary published) plus "
+        "jobs.ch and jobup.ch (all industries).",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

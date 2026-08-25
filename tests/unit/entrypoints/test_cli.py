@@ -236,7 +236,7 @@ def test_direct_apply_refuses_an_undeliverable_posting(fresh_uow, tmp_path, caps
         "Hi",
     )
     assert rc == 2
-    assert "USE CHROME MCP" in capsys.readouterr().err
+    assert "Apply in a browser" in capsys.readouterr().err
     assert board.sent == []
 
 
