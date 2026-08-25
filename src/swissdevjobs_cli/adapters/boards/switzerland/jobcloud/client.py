@@ -62,17 +62,28 @@ class JobCloudClient:
         *,
         query: str | None = None,
         category: str | None = None,
+        contract: str | None = None,
+        workload: int | None = None,
         force: bool = False,
     ) -> list[Job]:
         """The matching slice, newest first — or the newest postings, no query.
 
         ``category`` is an alias ("it") resolved against this board's own
-        taxonomy. Pagination stops at the page budget, the server's own page
-        count, and the 2000-result window, whichever comes first.
+        taxonomy; ``contract`` and ``workload`` filter server-side (the ids
+        are platform-wide — see ``acl.CONTRACT_TYPE_IDS``), which matters on
+        a search-driven board: post-fetch filtering would waste the 2000-row
+        result window on rows we then throw away. Pagination stops at the
+        page budget, the server's own page count, and that window, whichever
+        comes first.
         """
         base: list[tuple] = [("rows", ROWS_PER_PAGE), ("sort", "date")]
         if query:
             base.append(("query", query))
+        if contract in acl.CONTRACT_TYPE_IDS:
+            base.append(("employment-type-ids[]", acl.CONTRACT_TYPE_IDS[contract]))
+        if workload is not None:
+            base.append(("employment-grade-min", workload))
+            base.append(("employment-grade-max", workload))
         if category:
             ids = CATEGORY_IDS.get(self.board.source, {})
             if category not in ids:

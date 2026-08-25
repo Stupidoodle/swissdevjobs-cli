@@ -22,6 +22,8 @@ def list_jobs(
     query: str | None = None,
     category: str | None = None,
     tech: list[str] | None = None,
+    contract: str | None = None,
+    workload: int | None = None,
     max_age_seconds: int = 600,
     force: bool = False,
 ) -> list[Job]:
@@ -41,6 +43,8 @@ def list_jobs(
             jobs = board.fetch_jobs(
                 query=server_query(board.board, query, tech),
                 category=category,
+                contract=contract,
+                workload=workload,
                 force=force,
             )
             uow.jobs.store_jobs(jobs)
@@ -69,6 +73,8 @@ def requested_filters(
     level: str | None = None,
     min_salary: int | None = None,
     max_salary: int | None = None,
+    contract: str | None = None,
+    workload: int | None = None,
 ) -> set:
     """The filter dimensions this call actually asked for."""
     wanted = set()
@@ -82,6 +88,10 @@ def requested_filters(
         wanted.add("level")
     if min_salary is not None or max_salary is not None:
         wanted.add("salary")
+    if contract:
+        wanted.add("contract")
+    if workload is not None:
+        wanted.add("workload")
     return wanted
 
 
@@ -261,6 +271,19 @@ def _salary_ok(
     )
 
 
+def _contract_ok(raw: Mapping[str, Any], contract: str | None) -> bool:
+    if not contract:
+        return True
+    return contract in (raw.get("contractTypes") or [])
+
+
+def _workload_ok(raw: Mapping[str, Any], workload: int | None) -> bool:
+    if workload is None:
+        return True
+    lo, hi = raw.get("workloadFrom"), raw.get("workloadTo")
+    return lo is not None and hi is not None and lo <= workload <= hi
+
+
 def _query_ok(raw: Mapping[str, Any], tags: set, query: str | None) -> bool:
     if not query:
         return True
@@ -289,6 +312,8 @@ def matches(
     language: str | None = None,
     query: str | None = None,
     company: str | None = None,
+    contract: str | None = None,
+    workload: int | None = None,
 ) -> bool:
     """Apply every requested filter; filters combine as AND.
 
@@ -314,6 +339,8 @@ def matches(
     if language and (raw.get("language") or "").lower() != language.lower():
         return False
     if not _salary_ok(raw, min_salary, max_salary):
+        return False
+    if not _contract_ok(raw, contract) or not _workload_ok(raw, workload):
         return False
     if company and company.lower() not in (raw.get("company") or "").lower():
         return False

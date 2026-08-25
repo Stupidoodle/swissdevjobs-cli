@@ -143,3 +143,13 @@ def test_the_original_wire_mapping_is_not_mutated():
     acl.job_from_wire(wire, JOBSCH)
     assert "name" not in wire
     assert "source" not in wire
+
+
+def test_contract_and_workload_are_normalized_onto_the_row():
+    job = acl.job_from_wire(
+        doc(employment_type_ids=["5"], employment_grades=[80, 85, 90, 95, 100]),
+        JOBSCH,
+    )
+    assert job.raw["contractTypes"] == ["permanent"]
+    assert job.raw["workloadFrom"] == 80
+    assert job.raw["workloadTo"] == 100

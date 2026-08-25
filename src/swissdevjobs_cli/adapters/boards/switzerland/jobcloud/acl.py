@@ -34,6 +34,21 @@ _LANGUAGE_NAMES = {
     "it": "Italian",
 }
 
+# Shared contract aliases → the platform's employment-type ids. Mapping
+# recon 2026-08-25: one sample posting per id checked against the label the
+# site renders for it (id 2 returned exactly the postings labelled
+# "Freelance", etc.); jobup.ch accepts the same ids — the taxonomy is
+# platform-wide, unlike the per-board category trees.
+CONTRACT_TYPE_IDS: dict[str, int] = {
+    "temporary": 1,
+    "freelance": 2,
+    "internship": 3,
+    "supplementary": 4,
+    "permanent": 5,
+    "apprenticeship": 6,
+}
+_ID_CONTRACTS = {str(i): alias for alias, i in CONTRACT_TYPE_IDS.items()}
+
 
 def _primary_language(wire: Mapping[str, Any]) -> str | None:
     skills = wire.get("language_skills") or []
@@ -84,6 +99,14 @@ def _normalize(wire: Mapping[str, Any], board: Board) -> dict[str, Any]:
     raw["filterTags"] = tech
     raw["country"] = board.country
     raw["source"] = board.source
+    raw["contractTypes"] = [
+        _ID_CONTRACTS[str(i)]
+        for i in raw.get("employment_type_ids") or []
+        if str(i) in _ID_CONTRACTS
+    ]
+    grades = [g for g in raw.get("employment_grades") or [] if isinstance(g, int)]
+    raw["workloadFrom"] = min(grades) if grades else None
+    raw["workloadTo"] = max(grades) if grades else None
     return raw
 
 

@@ -96,3 +96,16 @@ def test_submit_application_refuses_loudly():
     detail = client.hydrate_detail(detail_doc())
     with pytest.raises(RuntimeError, match="no native apply"):
         client.submit_application(detail, None, "Dear team")
+
+
+def test_contract_and_workload_filter_server_side():
+    """The platform's own params do the filtering, server-side.
+
+    Post-fetch filtering would waste the search-driven result window on
+    rows the client then throws away.
+    """
+    http = FakeHttp(pages={1: []})
+    JobCloudClient(BOARDS["jobsch"], http).fetch_jobs(contract="freelance", workload=80)
+    assert "employment-type-ids%5B%5D=2" in http.gets[0]
+    assert "employment-grade-min=80" in http.gets[0]
+    assert "employment-grade-max=80" in http.gets[0]

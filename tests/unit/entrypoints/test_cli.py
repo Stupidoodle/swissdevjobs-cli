@@ -562,3 +562,39 @@ def test_the_table_view_prints_the_coverage_note_on_stderr(fresh_uow, capsys):
     run(runtime, "list", "--min-salary", "120000")
     err = capsys.readouterr().err
     assert "note:" in err and "jobsch: no salary data" in err
+
+
+def test_contract_filter_works_on_both_platforms(fresh_uow, capsys):
+    ch = FakeBoard(
+        feed=[
+            job(jobType="Contract"),
+            job(
+                _id="68b0000057370f0152e4950e", jobUrl="perm-role", jobType="Full-Time"
+            ),
+        ],
+        board=BOARDS["swissdevjobs"],
+    )
+    runtime = Runtime(
+        boards={"swissdevjobs": ch}, uow=fresh_uow, enabled=["swissdevjobs"]
+    )
+    assert run(runtime, "list", "--contract", "freelance", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["returned"] == 1
+    assert payload["jobs"][0]["contract"] == ["freelance", "temporary"]
+    assert "boards_excluded" not in payload
+
+
+def test_workload_filter_excludes_boards_without_workload_data(fresh_uow, capsys):
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
+    jobsch = FakeBoard(feed=[], board=BOARDS["jobsch"])
+    runtime = Runtime(
+        boards={"swissdevjobs": ch, "jobsch": jobsch},
+        uow=fresh_uow,
+        enabled=["swissdevjobs", "jobsch"],
+    )
+    assert run(runtime, "list", "--workload", "80", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["boards_excluded"] == {"swissdevjobs": ["workload"]}
+    assert payload["boards_searched"] == ["jobsch"]
+    # The searchable board received the filter to run server-side.
+    assert jobsch.filters == [(None, 80)]

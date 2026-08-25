@@ -25,6 +25,8 @@ class BoardPort(Protocol):
         *,
         query: str | None = None,
         category: str | None = None,
+        contract: str | None = None,
+        workload: int | None = None,
         force: bool = False,
     ) -> list[Job]:
         """Postings, ACL-normalized to domain Jobs.

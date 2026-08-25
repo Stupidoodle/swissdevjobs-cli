@@ -53,3 +53,20 @@ def test_the_original_wire_mapping_is_not_mutated():
     acl.job_from_wire(wire, BOARDS["swissdevjobs"])
     assert "postedAt" not in wire
     assert "country" not in wire
+
+
+def test_job_type_maps_onto_the_shared_contract_aliases():
+    """A Contract row answers to both the freelance and temporary aliases.
+
+    The platform folds contracting and temp work into one jobType value.
+    """
+    permanent = acl.job_from_wire(
+        {"_id": "62eccd7a57370f0152e4950e", "jobType": "Full-Time"},
+        BOARDS["swissdevjobs"],
+    )
+    assert permanent.raw["contractTypes"] == ["permanent"]
+    contractor = acl.job_from_wire(
+        {"_id": "62eccd7a57370f0152e4950e", "jobType": "Contract"},
+        BOARDS["swissdevjobs"],
+    )
+    assert contractor.raw["contractTypes"] == ["freelance", "temporary"]

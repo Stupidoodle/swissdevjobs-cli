@@ -198,6 +198,8 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             level=args.level,
             min_salary=args.min_salary,
             max_salary=args.max_salary,
+            contract=args.contract,
+            workload=args.workload,
         ),
     )
     jobs = with_retry(
@@ -208,6 +210,8 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         query=args.query,
         category=args.category,
         tech=args.tech,
+        contract=args.contract,
+        workload=args.workload,
         force=args.refresh,
     )
     filtered = [
@@ -226,6 +230,8 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             language=args.language,
             query=search.query_for(j, args.query),
             company=args.company,
+            contract=args.contract,
+            workload=args.workload,
         )
     ]
     filtered.sort(key=lambda j: search.sort_key(j, by=args.sort))
@@ -457,6 +463,7 @@ def cmd_boards(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         BoardDTO.from_domain(
             b,
             categories=registry.categories_for(source),
+            contracts=registry.contracts_for(source),
             enabled=source in runtime.enabled,
         ).as_dict()
         for source, b in registry.BOARDS.items()
@@ -845,6 +852,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lp.add_argument("--language", help="e.g. English, German")
     lp.add_argument("--company")
+    lp.add_argument(
+        "--contract",
+        choices=registry.known_contracts(),
+        help="contract type; boards map their own taxonomy onto these aliases",
+    )
+    lp.add_argument(
+        "--workload",
+        type=int,
+        metavar="PCT",
+        help="workload percent the posting must offer, e.g. 80",
+    )
     lp.add_argument("--min-salary", type=int)
     lp.add_argument("--max-salary", type=int)
     lp.add_argument(

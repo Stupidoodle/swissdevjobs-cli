@@ -63,10 +63,12 @@ the results**. Since 0.6, `list --json` returns compact summary rows in an
 envelope (with `boards_searched` and a coverage `note`), capped at 50 unless
 you pass `--limit` (`0` = uncapped). `--raw` restores the full wire rows
 (~470 tokens each — always cap those with `--limit`). Filters a board's
-platform cannot serve (salary, remote, visa, level on jobs.ch/jobup.ch)
-exclude that board **visibly**: the envelope carries `boards_excluded` and
-the note explains it — drop the filter to search those boards. `--tech`
-still reaches them: the terms travel server-side as the full-text query.
+platform cannot serve (salary, remote, visa, level on jobs.ch/jobup.ch;
+`--workload` on the devitjobs boards) exclude that board **visibly**: the
+envelope carries `boards_excluded` and the note explains it — drop the
+filter to search those boards. `--tech` still reaches jobs.ch/jobup.ch
+(the terms travel server-side as the full-text query), and `--contract`
+works on every board via shared aliases (`permanent`, `freelance`, …).
 
 ```sh
 sdj boards                                    # every board, as data

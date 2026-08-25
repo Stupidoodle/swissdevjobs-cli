@@ -20,7 +20,10 @@ coverage was newest-only, and a `boards_excluded` map when a requested
 filter (salary, remote, visa, level) does not exist on a board's wire —
 those boards were not searched at all, not searched-and-empty; drop the
 filter to include them. A `tech` filter still works on tagless boards: the
-terms are matched server-side as full text (the note says so).
+terms are matched server-side as full text (the note says so). `contract`
+takes shared aliases (`permanent`, `freelance`, …) that every board maps
+onto its own taxonomy; `workload` (percent) exists only on boards that
+publish workload ranges — the rest are excluded visibly.
 Summary rows omit empty fields entirely and carry
 salary as numbers (`salary_from`/`salary_to` + `currency`); rows without
 them come from boards that publish no salary data — that is the platform,

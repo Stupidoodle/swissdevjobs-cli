@@ -121,7 +121,14 @@ server-side query (`search.server_query`; JobCloud ANDs multi-term
 queries, verified live) and its rows skip the client tag filter
 (`search.tech_for`). `tests/unit/service_layer/test_filter_parity.py`
 enforces the matrix over the live registry — a new board or a new filter
-param fails it until classified.
+param fails it until classified. Contract types work the same way as
+categories: shared aliases (`registry.known_contracts()`) that each
+platform maps onto its own taxonomy (devitjobs `jobType` in its ACL,
+JobCloud `employment-type-ids` — platform-wide, verified on both boards);
+`workload` percent exists only on the JobCloud wire (`employment_grades`),
+so the devitjobs boards declare it unavailable. Search-driven boards run
+contract/workload server-side via `fetch_jobs` params — post-fetch
+filtering would waste their 2000-row result window.
 Selectors — `--board` (aliases `--source`, `--country`), `SDJ_BOARDS`
 (fallback: the pre-0.5.1 `SDJ_COUNTRIES`), the MCP `board` param (deprecated
 alias `country`) — accept a source id (`jobsch`) or a country code (expands

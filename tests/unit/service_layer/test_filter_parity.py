@@ -20,6 +20,8 @@ GATED = {
     "visa": {"visa": True},
     "level": {"level": "Senior"},
     "salary": {"min_salary": 1},
+    "contract": {"contract": "permanent"},
+    "workload": {"workload": 80},
 }
 # Params that must work on every platform's normalized row, no gate allowed.
 UNIVERSAL = {"location", "language", "company", "query", "tech_any"}
@@ -36,7 +38,16 @@ def test_every_matches_param_is_classified_gated_or_universal():
     Unclassified means it could silently empty a board again.
     """
     params = set(inspect.signature(search.matches).parameters) - {"job"}
-    gated_params = {"tech", "remote", "visa", "level", "min_salary", "max_salary"}
+    gated_params = {
+        "tech",
+        "remote",
+        "visa",
+        "level",
+        "min_salary",
+        "max_salary",
+        "contract",
+        "workload",
+    }
     assert params == gated_params | UNIVERSAL
 
 

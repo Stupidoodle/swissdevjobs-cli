@@ -24,11 +24,12 @@ class BoardDTO:
     search_driven: bool
     native_apply: bool
     categories: list[str]
+    contracts: list[str]
     enabled: bool
 
     @classmethod
     def from_domain(
-        cls, board: Board, *, categories: list[str], enabled: bool
+        cls, board: Board, *, categories: list[str], contracts: list[str], enabled: bool
     ) -> BoardDTO:
         """Build from a registry Board plus its runtime state."""
         return cls(
@@ -44,6 +45,7 @@ class BoardDTO:
             search_driven=board.search_driven,
             native_apply=board.native_apply,
             categories=categories,
+            contracts=contracts,
             enabled=enabled,
         )
 
@@ -62,5 +64,6 @@ class BoardDTO:
             "search_driven": self.search_driven,
             "native_apply": self.native_apply,
             "categories": self.categories,
+            "contracts": self.contracts,
             "enabled": self.enabled,
         }

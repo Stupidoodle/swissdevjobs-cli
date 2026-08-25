@@ -27,6 +27,9 @@ class JobSummaryDTO:
     salary_to: int | None
     currency: str
     workplace: str | None
+    contract: list[str]
+    workload_from: int | None
+    workload_to: int | None
     language: str | None
     technologies: list[str]
     posted_at: str | None
@@ -49,6 +52,9 @@ class JobSummaryDTO:
             salary_to=raw.get("annualSalaryTo"),
             currency=job.board.currency,
             workplace=raw.get("workplace"),
+            contract=list(raw.get("contractTypes") or []),
+            workload_from=raw.get("workloadFrom"),
+            workload_to=raw.get("workloadTo"),
             language=raw.get("language"),
             technologies=list(raw.get("filterTags") or [])[:8],
             posted_at=raw.get("postedAt"),
@@ -71,6 +77,9 @@ class JobSummaryDTO:
                 else None
             ),
             "workplace": self.workplace,
+            "contract": self.contract,
+            "workload_from": self.workload_from,
+            "workload_to": self.workload_to,
             "language": self.language,
             "technologies": self.technologies,
             "posted_at": self.posted_at,

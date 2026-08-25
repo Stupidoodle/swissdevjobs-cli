@@ -19,12 +19,16 @@ class FakeBoard:
         self._detail_wire = detail_wire
         self.sent = []
         self.queries = []
+        self.filters = []
         self.raises = None
 
-    def fetch_jobs(self, *, query=None, category=None, force=False):
+    def fetch_jobs(
+        self, *, query=None, category=None, contract=None, workload=None, force=False
+    ):
         if self.raises:
             raise self.raises
         self.queries.append((query, category))
+        self.filters.append((contract, workload))
         return acl.jobs_from_wire(self._feed_wire, self.board)
 
     def fetch_detail(self, job_id):

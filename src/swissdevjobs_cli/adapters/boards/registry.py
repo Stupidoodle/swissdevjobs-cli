@@ -22,6 +22,7 @@ BOARDS: dict[str, Board] = {
         name="SwissDevJobs",
         currency="CHF",
         source="swissdevjobs",
+        filters_unavailable=("workload",),
     ),
     "germantechjobs": Board(
         platform="devitjobs",
@@ -30,6 +31,7 @@ BOARDS: dict[str, Board] = {
         name="GermanTechJobs",
         currency="EUR",
         source="germantechjobs",
+        filters_unavailable=("workload",),
     ),
     "devitjobs-uk": Board(
         platform="devitjobs",
@@ -38,6 +40,7 @@ BOARDS: dict[str, Board] = {
         name="DevITjobs UK",
         currency="GBP",
         source="devitjobs-uk",
+        filters_unavailable=("workload",),
     ),
     "devitjobs-us": Board(
         platform="devitjobs",
@@ -46,6 +49,7 @@ BOARDS: dict[str, Board] = {
         name="DevITjobs US/CA",
         currency="USD",
         source="devitjobs-us",
+        filters_unavailable=("workload",),
     ),
     "devitjobs-nl": Board(
         platform="devitjobs",
@@ -54,6 +58,7 @@ BOARDS: dict[str, Board] = {
         name="DevITjobs NL",
         currency="EUR",
         source="devitjobs-nl",
+        filters_unavailable=("workload",),
     ),
     "devitjobs-fr": Board(
         platform="devitjobs",
@@ -62,6 +67,7 @@ BOARDS: dict[str, Board] = {
         name="DevITjobs FR",
         currency="EUR",
         source="devitjobs-fr",
+        filters_unavailable=("workload",),
     ),
     "jobsch": Board(
         platform="jobcloud",
@@ -111,6 +117,29 @@ def categories_for(source: str) -> list[str]:
     )
 
     return sorted(CATEGORY_IDS.get(source, {}))
+
+
+def contracts_for(source: str) -> list[str]:
+    """The contract-type aliases one board's platform can serve."""
+    board = BOARDS.get(source)
+    if board is None:
+        return []
+    if board.platform == "jobcloud":
+        from swissdevjobs_cli.adapters.boards.switzerland.jobcloud.acl import (
+            CONTRACT_TYPE_IDS,
+        )
+
+        return sorted(CONTRACT_TYPE_IDS)
+    from swissdevjobs_cli.adapters.boards.worldwide.devitjobs.acl import (
+        JOBTYPE_CONTRACTS,
+    )
+
+    return sorted({a for aliases in JOBTYPE_CONTRACTS.values() for a in aliases})
+
+
+def known_contracts() -> list[str]:
+    """Every contract alias any board understands — the shared schema enum."""
+    return sorted({c for source in BOARDS for c in contracts_for(source)})
 
 
 def known_categories() -> list[str]:

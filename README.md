@@ -153,14 +153,14 @@ no need to memorize which board does what:
 $ sdj boards
 8 boards — select with --board <id|country>, persist with `sdj config --boards`
 ----------------------------------------------------------------------------------------------------
-swissdevjobs     ch   SwissDevJobs        CHF  enabled  it · salary
-germantechjobs   de   GermanTechJobs      EUR  enabled  it · salary
-devitjobs-uk     uk   DevITjobs UK        GBP  enabled  it · salary
-devitjobs-us     us   DevITjobs US/CA     USD  enabled  it · salary
-devitjobs-nl     nl   DevITjobs NL        EUR  enabled  it · salary
-devitjobs-fr     fr   DevITjobs FR        EUR  enabled  it · salary
-jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · categories: it
-jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · categories: it
+swissdevjobs     ch   SwissDevJobs        CHF  enabled  it · salary · unfilterable: workload
+germantechjobs   de   GermanTechJobs      EUR  enabled  it · salary · unfilterable: workload
+devitjobs-uk     uk   DevITjobs UK        GBP  enabled  it · salary · unfilterable: workload
+devitjobs-us     us   DevITjobs US/CA     USD  enabled  it · salary · unfilterable: workload
+devitjobs-nl     nl   DevITjobs NL        EUR  enabled  it · salary · unfilterable: workload
+devitjobs-fr     fr   DevITjobs FR        EUR  enabled  it · salary · unfilterable: workload
+jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
+jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
 ```
 
 **jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
@@ -343,6 +343,7 @@ $ sdj list "python" --board swissdevjobs --json --limit 2
       "salary_to": 130000,
       "currency": "CHF",
       "workplace": "hybrid",
+      "contract": ["permanent"],
       "language": "German",
       "technologies": ["BIM", "CAFM", "Embedded", "ERP", "Mobile", "Python", "AI"],
       "posted_at": "2026-08-25T12:00:22+00:00",
@@ -497,6 +498,8 @@ $ sdj direct-apply some-workday-job --json
 | `--level` | `Junior` · `Regular` · `Senior` · `Principal` · `CLevel` |
 | `--language` | posting language, e.g. `English`, `German` |
 | `--min-salary` / `--max-salary` | per year, in the board's currency |
+| `--contract` | `permanent` · `temporary` · `freelance` · `internship` · `apprenticeship` · `supplementary` — each board maps its own taxonomy onto these aliases |
+| `--workload 80` | postings offering that workload percent (jobs.ch/jobup.ch publish ranges; the devitjobs boards don't and are excluded visibly) |
 | `--company` | substring match |
 | `--sort` | `posted` *(default)* · `date` · `salary` · `company` |
 | `--limit N` | hard cap on rows; `0` = no cap. Default: no cap for the table and `--raw`, 50 for `--json` |
@@ -512,8 +515,10 @@ data (their own site can't filter on those either), so filtering on one of
 them excludes those boards *visibly*: the JSON envelope carries
 `boards_excluded` and a `note`, the table prints the note on stderr —
 never a silent empty result. `--tech` still works there: the terms are
-matched server-side as full-text query (multi-term queries AND together).
-`sdj boards` shows each board's unavailable dimensions as data.
+matched server-side as full-text query (multi-term queries AND together),
+and `--contract`/`--workload` filter server-side through the platform's
+own taxonomy. `sdj boards` shows each board's unavailable dimensions and
+contract aliases as data.
 
 <details>
 <summary>Why <code>--refresh</code> does more than skip the local cache</summary>
@@ -852,7 +857,7 @@ tests/               230 offline tests mirroring src — fakes per port, no mock
 
 ```sh
 make install    # uv sync
-make check      # ruff + ty + import-linter + 230 tests with a 90% coverage gate
+make check      # ruff + ty + import-linter + 250 tests with a 90% coverage gate
 make test-live  # optional: read-only smoke against all eight real boards
 ```
 

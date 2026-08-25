@@ -101,6 +101,8 @@ def tool_search_jobs(
     company: str | None = None,
     min_salary: int | None = None,
     max_salary: int | None = None,
+    contract: str | None = None,
+    workload: int | None = None,
     sort: str = "posted",
     limit: int = 25,
     include_applied: bool = False,
@@ -121,12 +123,20 @@ def tool_search_jobs(
         level=level,
         min_salary=min_salary,
         max_salary=max_salary,
+        contract=contract,
+        workload=workload,
     )
     board_clients, excluded = search.split_by_filterability(
         _boards_for(runtime, board or country), wanted
     )
     jobs = search.list_jobs(
-        uow, board_clients, query=query, category=category, tech=tech
+        uow,
+        board_clients,
+        query=query,
+        category=category,
+        tech=tech,
+        contract=contract,
+        workload=workload,
     )
     hits = [
         j
@@ -144,6 +154,8 @@ def tool_search_jobs(
             language=language,
             query=search.query_for(j, query),
             company=company,
+            contract=contract,
+            workload=workload,
         )
     ]
     hits.sort(key=lambda j: search.sort_key(j, by=sort))
@@ -313,6 +325,7 @@ def tool_list_boards(runtime: bootstrap.Runtime) -> dict[str, Any]:
             BoardDTO.from_domain(
                 b,
                 categories=registry.categories_for(source),
+                contracts=registry.contracts_for(source),
                 enabled=source in runtime.enabled,
             ).as_dict()
             for source, b in registry.BOARDS.items()
@@ -378,6 +391,18 @@ TOOLS: list[dict[str, Any]] = [
                 "company": {**_STR, "description": "company name substring"},
                 "min_salary": {**_INT, "description": "CHF per year"},
                 "max_salary": {**_INT, "description": "CHF per year"},
+                "contract": {
+                    **_STR,
+                    "enum": registry.known_contracts(),
+                    "description": "contract type; boards map their own "
+                    "taxonomy onto these aliases",
+                },
+                "workload": {
+                    **_INT,
+                    "description": "workload percent the posting must offer, "
+                    "e.g. 80 — boards without workload data are excluded "
+                    "visibly",
+                },
                 "sort": {
                     **_STR,
                     "enum": ["posted", "date", "salary", "company"],

@@ -21,6 +21,17 @@ from swissdevjobs_cli.domain.model.ids import JobId, posted_at_from_object_id
 from swissdevjobs_cli.domain.model.job import Job, JobDetail
 from swissdevjobs_cli.domain.model.salary import SalaryRange
 
+# Wire `jobType` → shared contract aliases. The platform folds contracting
+# and temp work into one "Contract" value, so that value answers to both
+# aliases. No workload percentages exist on this wire (Full/Part-Time is
+# as fine-grained as it gets) — `workload` stays in filters_unavailable.
+JOBTYPE_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "Full-Time": ("permanent",),
+    "Part-Time": ("permanent",),
+    "Contract": ("freelance", "temporary"),
+    "Internship": ("internship",),
+}
+
 
 def _decorate_posted_at(wire: dict[str, Any]) -> dict[str, Any]:
     """Add `postedAt` (ISO) and `postedAtUnix` decoded from the MongoDB ObjectId.
@@ -43,6 +54,7 @@ def job_from_wire(wire: Mapping[str, Any], board: Board) -> Job:
     raw = _decorate_posted_at(dict(wire))
     raw["country"] = board.country
     raw["source"] = board.source
+    raw["contractTypes"] = list(JOBTYPE_CONTRACTS.get(raw.get("jobType") or "", ()))
     return Job(
         id=JobId(raw.get("_id") or ""),
         slug=raw.get("jobUrl") or "",
