@@ -29,7 +29,14 @@ class SalaryRange:
         )
 
     def format(self) -> str:
-        """Human-readable range, Swiss-style thousands separators, "—" if unknown."""
+        """Human-readable range, Swiss-style thousands separators, "—" if unknown.
+
+        Syndicated listings often carry a single-point "range" (from == to —
+        hundreds of them on the UK board); render those as one value instead
+        of a degenerate X–X.
+        """
+        if self.lower and self.upper and self.lower == self.upper:
+            return f"{self.currency} {self.lower:,}".replace(",", "'")
         if self.lower and self.upper:
             return f"{self.currency} {self.lower:,}–{self.upper:,}".replace(",", "'")
         if self.lower:

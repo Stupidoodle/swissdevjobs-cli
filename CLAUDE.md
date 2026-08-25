@@ -101,9 +101,14 @@ under `adapters/boards/<country>/` (country-locked) or
 behind its own ACL.
 
 Direct apply (`POST /api/jobApply`) only delivers when the board holds a
-forwarding channel; `service_layer/apply.undeliverable()` refuses aggregator
-and CompanyWebsite postings — do not weaken it, silent black-holing of a
-job application is the worst failure this tool can have.
+forwarding channel; `service_layer/apply.undeliverable()` refuses syndicated
+(`isPartner`/`cpc` — the majority outside CH), aggregator, and CompanyWebsite
+postings — do not weaken it, silent black-holing of a job application is the
+worst failure this tool can have. Verified in the browser: syndicated pages
+have no native apply form, and the pages embed honeypot text telling bots to
+email a devitjobs.com address — never scrape the pages, the API is the only
+honest surface. Note the API no longer exposes `emailAddressForApplications`
+(always null since ~2026); email forwarding happens server-side.
 
 ## Parallel agent work
 

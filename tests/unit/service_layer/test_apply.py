@@ -125,3 +125,35 @@ def test_apply_payload_flattens_html_description_fields():
         domain_detail(description="<p>Build <b>things</b></p>"), posting_url="x"
     )
     assert payload["description"] == "Build things"
+
+
+def test_a_single_point_salary_renders_as_one_value():
+    assert fmt_salary(
+        job(annualSalaryFrom=65000, annualSalaryTo=65000)
+    ) == "GBP 65'000".replace("GBP", "CHF")
+
+
+def test_a_syndicated_listing_is_refused_even_off_the_known_host_list():
+    """isPartner/cpc mark paid syndication; the page has no native apply form.
+
+    Real example shape from germantechjobs.de — the redirect host (jobg8) is
+    NOT in AGGREGATOR_HOSTS, so only the flag catches it.
+    """
+    refusal = undeliverable(
+        domain_detail(
+            isPartner=True,
+            cpc=6.91,
+            candidateContactWay="CompanyWebsite",
+            emailAddressForApplications=None,
+            redirectJobUrl="https://www.jobg8.com/Traffic.aspx?f7Xneet",
+        )
+    )
+    assert refusal is not None
+    assert refusal["error"] == "syndicated_posting"
+    assert refusal["next_action"] == "use_chrome_mcp"
+    assert "jobg8.com" in refusal["message"]
+    assert refusal["apply_url"].startswith("https://www.jobg8.com/")
+
+
+def test_a_native_posting_without_partner_flags_is_still_deliverable():
+    assert undeliverable(domain_detail(isPartner=False)) is None

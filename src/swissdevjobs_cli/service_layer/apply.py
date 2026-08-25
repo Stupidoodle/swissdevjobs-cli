@@ -39,17 +39,29 @@ def undeliverable(detail: JobDetail) -> dict[str, Any] | None:
     native form genuinely delivers.
     """
     redirect = detail.redirect_url or ""
+    raw = detail.raw
 
     matched_host = next((h for h in AGGREGATOR_HOSTS if h in redirect.lower()), None)
+    # The boards mark paid syndicated listings explicitly (isPartner / cpc).
+    # Verified in the browser: those pages carry NO native apply form — the
+    # apply button is a bare external link — so a native POST black-holes.
+    is_syndicated = bool(raw.get("isPartner") or raw.get("cpc"))
     is_aggregator = matched_host is not None
     is_company_website = (
         detail.contact_way == "CompanyWebsite" and not detail.apply_email
     )
 
-    if not (is_aggregator or is_company_website):
+    if not (is_syndicated or is_aggregator or is_company_website):
         return None
 
-    if is_aggregator:
+    if is_syndicated:
+        reason = "syndicated_posting"
+        host = matched_host or (redirect.split("/")[2] if "://" in redirect else None)
+        why = (
+            f"the listing is a paid syndication ({host or 'external network'}) "
+            "and the board has no native apply form for it"
+        )
+    elif is_aggregator:
         reason = "aggregator_posting"
         why = f"the posting is syndicated via {matched_host}"
     else:

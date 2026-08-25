@@ -4,10 +4,12 @@
 
 **Search, filter, and apply to ~4,700 tech jobs across 7 countries — with salary data — without leaving your terminal.**
 
+🇨🇭 Switzerland · 🇩🇪 Germany · 🇬🇧 UK · 🇺🇸🇨🇦 US & Canada · 🇳🇱 Netherlands · 🇫🇷 France
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
-[![Boards](https://img.shields.io/badge/boards-🇨🇭🇩🇪🇬🇧🇺🇸🇨🇦🇳🇱🇫🇷-orange.svg)](#boards)
+[![Boards](https://img.shields.io/badge/boards-6_boards_·_7_countries-orange.svg)](#boards)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2.svg)](#install)
 [![MCP](https://img.shields.io/badge/MCP-server%20included-6E56CF.svg)](#mcp-server)
 [![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
@@ -125,9 +127,13 @@ sdj config --countries ch,de              # persist: only search CH + DE
 sdj config --countries all                # back to everything
 ```
 
-Every board enforces published salary ranges, and the applied-jobs ledger is
-shared — apply to a role on one board and the same company+role is hidden on
-all of them.
+Native postings on every board publish a salary range. Syndicated listings
+(marked `isPartner` by the boards — the majority outside Switzerland) sometimes
+carry no range or a single-point figure; the tool renders those honestly and
+**refuses to native-apply to them**, handing you the real ATS URL instead —
+their pages have no native apply form, so a native submission would silently
+vanish. The applied-jobs ledger is shared — apply to a role on one board and
+the same company+role is hidden on all of them.
 
 Want a board outside the family? [Open a board request](https://github.com/Stupidoodle/swissdevjobs-cli/issues/new?template=board_request.yml).
 
