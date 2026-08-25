@@ -1,0 +1,43 @@
+name: Board request
+description: Ask for a job board to be supported. The maintainer implements boards.
+title: "[board] "
+labels: ["board-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Board adapters are implemented by the maintainer — they involve
+        reverse-engineering and an irreversible apply flow that needs careful
+        verification. Fill in what you know; every field beyond the URL is a
+        bonus.
+  - type: input
+    id: url
+    attributes:
+      label: Board URL
+      placeholder: https://example-jobs.com
+    validations:
+      required: true
+  - type: input
+    id: country
+    attributes:
+      label: Country / region it covers
+      placeholder: e.g. Austria, or worldwide-remote
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: What does it list?
+      options:
+        - Tech jobs only
+        - All industries
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything you know about how it works
+      placeholder: |
+        Public API? Salary ranges published? How does applying work —
+        on-site form, email, or redirect to the company's ATS?

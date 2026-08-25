@@ -1,0 +1,27 @@
+name: Bug report
+description: Something broke.
+labels: ["bug"]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: What did you run?
+      placeholder: sdj list --country de --json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / traceback
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version and Python
+      placeholder: "sdj 0.4.0, Python 3.12, macOS"

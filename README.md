@@ -2,11 +2,12 @@
 
 # 🇨🇭 swissdevjobs-cli
 
-**Search, filter, and apply to Swiss dev jobs — with salary data — without leaving your terminal.**
+**Search, filter, and apply to ~4,700 tech jobs across 7 countries — with salary data — without leaving your terminal.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
+[![Boards](https://img.shields.io/badge/boards-🇨🇭🇩🇪🇬🇧🇺🇸🇨🇦🇳🇱🇫🇷-orange.svg)](#boards)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2.svg)](#install)
 [![MCP](https://img.shields.io/badge/MCP-server%20included-6E56CF.svg)](#mcp-server)
 [![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
@@ -15,23 +16,26 @@
 
 ---
 
-Every posting on [swissdevjobs.ch](https://swissdevjobs.ch) is required to publish a
-salary range. That makes it one of the few job boards where you can filter by pay
-before you click. This CLI puts that whole feed in your shell — searchable, sortable,
-scriptable, and JSON-first so an LLM agent can drive it.
+Every posting on [swissdevjobs.ch](https://swissdevjobs.ch) — and its five sister
+boards covering Germany, the UK, the US & Canada, the Netherlands, and France — is
+required to publish a salary range. That makes them the rare job boards where you can
+filter by pay before you click. This CLI puts all six feeds in your shell —
+searchable, sortable, scriptable, and JSON-first so an LLM agent can drive it.
 
-It also remembers what you've already applied to, so the same job never shows up twice.
+It also remembers what you've already applied to, across every board, so the same
+job never shows up twice.
 
 ```console
-$ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
-9 shown · 9 match filters · 1247 in feed · 3 hidden (already applied)
+$ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
+14 shown · 14 match filters · 4681 in feed · 3 hidden (already applied)
 ----------------------------------------------------------------------------------------
-686f2a1c…  p=2026-08-19 a=2026-08-22  Senior Platform Engineer      Acme AG      Zurich    CHF 145'000–170'000  remote   Kubernetes, Go, Terraform
+686f2a1c…  ch   p=2026-08-19 a=2026-08-22  Senior Platform Engineer   Acme AG      Zurich   CHF 145'000–170'000  remote  Kubernetes, Go, Terraform
+6a8caf89…  de   p=2026-08-24               Senior DevOps Engineer     Beispiel AG  Berlin   EUR 95'000–115'000   remote  Kubernetes, AWS, Python
 ```
 
 ## Contents
 
-- [Install](#install) · [Why](#why) · [Configure](#configure) · [Commands](#commands)
+- [Install](#install) · [Why](#why) · [Boards](#boards) · [Configure](#configure) · [Commands](#commands)
 - [How applying works](#how-applying-works) · [Filtering](#filtering)
 - [MCP server](#mcp-server) · [Under the hood](#under-the-hood) · [Cloudflare](#cloudflare)
 - [Claude Code skill](#claude-code-skill) · [Development](#development)
@@ -42,6 +46,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 130000 --sort salary
 
 | | |
 |---|---|
+| 🌍 **Six boards, one tool** | Switzerland, Germany, UK, US/Canada, Netherlands, France — same backend family, one search, per-board currencies |
 | 💰 **Salary is a first-class filter** | `--min-salary 130000` — no more opening 40 tabs to find the range |
 | 📅 **Real posting dates** | The site re-stamps `activeFrom` when it bumps a listing. This decodes the true creation time from the MongoDB ObjectId, so a "new" job that's actually four months old can't fool you |
 | 🧠 **Remembers where you applied** | Local SQLite. Applied jobs vanish from `list` automatically |
@@ -93,6 +98,38 @@ Not published to PyPI.
 </details>
 
 Installs two equivalent binaries: **`sdj`** and **`swissdevjobs`**. Python 3.9+.
+
+---
+
+## Boards
+
+Six boards, one backend, one tool. `swissdevjobs.ch`'s operator runs the same
+platform in five more countries — identical API, identical apply flow — so one
+client covers all of them:
+
+| | Board | Country | Currency | Direct apply |
+|---|---|---|---|---|
+| 🇨🇭 | [swissdevjobs.ch](https://swissdevjobs.ch) | Switzerland | CHF | ✅ |
+| 🇩🇪 | [germantechjobs.de](https://germantechjobs.de) | Germany | EUR | ✅ |
+| 🇬🇧 | [devitjobs.uk](https://devitjobs.uk) | United Kingdom | GBP | ✅ |
+| 🇺🇸🇨🇦 | [devitjobs.com](https://devitjobs.com) | US & Canada | USD | ✅ |
+| 🇳🇱 | [devitjobs.nl](https://devitjobs.nl) | Netherlands | EUR | ✅ |
+| 🇫🇷 | [devitjobs.fr](https://devitjobs.fr) | France | EUR | ✅ |
+
+All boards are searched by default. Narrow per command with `--country`, or
+persist a subset:
+
+```sh
+sdj list --country de --country uk        # just Germany + UK, this once
+sdj config --countries ch,de              # persist: only search CH + DE
+sdj config --countries all                # back to everything
+```
+
+Every board enforces published salary ranges, and the applied-jobs ledger is
+shared — apply to a role on one board and the same company+role is hidden on
+all of them.
+
+Want a board outside the family? [Open a board request](https://github.com/Stupidoodle/swissdevjobs-cli/issues/new?template=board_request.yml).
 
 ---
 
@@ -337,13 +374,14 @@ $ sdj direct-apply some-workday-job --json
 
 | flag | effect |
 |---|---|
+| `--country ch` *(repeatable)* | which boards to search; defaults to your enabled set |
 | `--tech X` *(repeatable)* | match **any** listed tag; add `--tech-all` to require all of them |
 | `--location Zurich` | substring match on city |
 | `--remote` / `--onsite` | remote+hybrid only / exclude remote |
 | `--visa` | visa sponsorship only |
 | `--level` | `Junior` · `Regular` · `Senior` · `Principal` · `CLevel` |
 | `--language` | posting language, e.g. `English`, `German` |
-| `--min-salary` / `--max-salary` | CHF per year |
+| `--min-salary` / `--max-salary` | per year, in the board's currency |
 | `--company` | substring match |
 | `--sort` | `posted` *(default)* · `date` · `salary` · `company` |
 | `--limit N` | hard cap on rows |
@@ -395,14 +433,14 @@ No prior install needed if you have `uv` — swap the command for
 }
 ```
 
-Then just ask: *"find me senior Python roles in Zurich over 140k and show me
-the top five."*
+Then just ask: *"find me senior Python roles in Zurich over 140k"* — or
+*"remote roles in Germany or the UK paying over 80k, show me the top five."*
 
 ### Tools
 
 | tool | what it does | read-only |
 |---|---|:--:|
-| `search_jobs` | filter by pay, stack, city, remote, seniority, visa | ✅ |
+| `search_jobs` | filter by pay, stack, city, country, remote, seniority, visa | ✅ |
 | `get_job` | full posting: description, requirements, screening questions | ✅ |
 | `apply_to_job` | submit through the site's own form — **gated** | ❌ |
 | `list_applications` | everything recorded locally | ✅ |
@@ -465,38 +503,55 @@ sequenceDiagram
 ## Under the hood
 
 ```mermaid
-flowchart LR
-    subgraph CLI["swissdevjobs_cli"]
-        direction TB
-        C["cli.py<br/>argparse commands"]
-        F["filter.py<br/>matching and sort keys"]
-        D["db.py<br/>SQLite cache + tracking"]
-        A["api.py<br/>HTTP, cookies, multipart"]
-        K["captcha.py<br/>challenge handoff"]
-        E["dotenv.py<br/>.env loading"]
+flowchart TB
+    subgraph EP["entrypoints"]
+        CLI["cli.py<br/>argparse commands"]
+        MCP["mcp.py<br/>JSON-RPC over stdio"]
+    end
+    subgraph SL["service_layer"]
+        SEARCH["search"]
+        APPLY["apply"]
+        TRACK["tracking"]
+    end
+    subgraph AD["adapters"]
+        REG["boards/registry<br/>6 boards by country"]
+        DEVIT["boards/worldwide/devitjobs<br/>client + ACL"]
+        HTTP["http/client<br/>urllib, cookies, CF detection"]
+        PERS["persistence<br/>mappers, repos, SQLite UoW"]
+    end
+    subgraph DOM["domain"]
+        MODEL["model: Job, Board,<br/>Salary, Application"]
+        PORTS["ports: BoardPort,<br/>repositories, UoW"]
     end
 
-    C --> F
-    C --> D
-    C --> A
-    A --> D
-    A -.->|"raises CaptchaRequired"| K
-    K -.->|"stores cookie, retries once"| A
-    E -.->|"at import"| A
-    E -.->|"at import"| D
-
-    D --> SQL[("~/.cache/…/swissdevjobs.db")]
-    A --> NET(["swissdevjobs.ch"])
-    K --> BROWSER(["your browser"])
+    CLI --> SEARCH
+    MCP --> SEARCH
+    CLI --> APPLY
+    MCP --> APPLY
+    SEARCH --> PORTS
+    APPLY --> PORTS
+    TRACK --> PORTS
+    DEVIT -.implements.-> PORTS
+    PERS -.implements.-> PORTS
+    DEVIT --> HTTP
+    DEVIT --> MODEL
+    PERS --> SQL[("~/.cache/…/swissdevjobs.db")]
+    HTTP --> NET(["6 boards, 7 countries"])
 
     classDef mod fill:#dbe7ff,stroke:#2a5db0,color:#12233f
     classDef ext fill:#ffe9b8,stroke:#b07d1a,color:#4a3308
     classDef store fill:#c7f0d8,stroke:#1a7f45,color:#0b3d22
 
-    class C,F,D,A,K,E mod
-    class NET,BROWSER ext
+    class CLI,MCP,SEARCH,APPLY,TRACK,REG,DEVIT,HTTP,PERS,MODEL,PORTS mod
+    class NET ext
     class SQL store
 ```
+
+The layering is [cosmic-python](https://www.cosmicpython.com/) style —
+domain at the center, adapters around it, entrypoints on the edge — and it
+is enforced, not aspirational: import-linter contracts plus an ast-based
+architecture test fail the build on any inward-pointing violation. The
+domain layer imports nothing but the stdlib.
 
 ### Request path
 
@@ -507,7 +562,7 @@ sequenceDiagram
     participant CLI as sdj
     participant DB as SQLite
     participant CF as Cloudflare
-    participant API as swissdevjobs.ch
+    participant API as the board
 
     U->>CLI: sdj list --tech Python
     CLI->>DB: cached jobs younger than 10 min?
@@ -540,7 +595,8 @@ sequenceDiagram
 | `GET /rss` | RSS feed, an alternate bulk source |
 | `POST /api/jobApply` | the site's own apply form, multipart/form-data |
 
-No auth, no API key on the read endpoints. Responses cached in SQLite — **10 min** for
+No auth, no API key on the read endpoints. The same surface exists on every
+board of the family. Responses cached in SQLite per board — **10 min** for
 the list, **1 h** for detail.
 
 ### The database
@@ -622,18 +678,25 @@ never type national ID or bank details into a form, hand CAPTCHAs back to you.
 
 ```
 src/swissdevjobs_cli/
-  api.py         HTTP client, cookie jar, challenge detection, multipart apply
-  captcha.py     Interactive Cloudflare handoff (browser + paste-cookie)
-  db.py          SQLite job cache and application tracking
-  dotenv.py      Stdlib .env loading with shell-wins precedence
-  filter.py      Matching predicates and sort keys
-  payloads.py    Pure shaping shared by the CLI and MCP (never prints)
-  mcp.py         JSON-RPC 2.0 server over stdio
-  cli.py         argparse commands and output formatting
-skill/SKILL.md   Standalone Claude Code skill
-plugin/          Claude Code plugin: manifest, .mcp.json, bundled skill
-.claude-plugin/  Marketplace manifest, so the repo installs itself
-tests/           63 offline tests — no network, sandboxed database
+  bootstrap.py       Composition root — the only place layers get wired
+  domain/
+    model/           One dataclass per file: Job, JobDetail, Board, Salary, …
+    ports/           One Protocol per file: BoardPort, repositories, UnitOfWork
+  adapters/
+    http/            urllib transport, cookie jar, Cloudflare detection
+    boards/
+      registry.py    Every board, keyed by ISO country code
+      worldwide/devitjobs/   Client + anti-corruption layer for the 6-board family
+    persistence/     Schema, imperative mappers, repositories, SQLite UnitOfWork
+    envfile.py       Stdlib .env loading with shell-wins precedence
+  service_layer/     Use cases: search, apply, tracking, config
+  dto/               The frozen entrypoint-facing shapes (plain dataclasses)
+  entrypoints/       cli.py (argparse) and mcp.py (JSON-RPC 2.0 over stdio)
+skill/SKILL.md       Standalone Claude Code skill
+plugin/              Claude Code plugin: manifest, .mcp.json, bundled skill
+.claude-plugin/      Marketplace manifest, so the repo installs itself
+tests/               172 offline tests mirroring src — fakes per port, no mocks,
+                     ast architecture checks, 90% coverage gate; opt-in live lane
 ```
 
 ---
@@ -641,13 +704,15 @@ tests/           63 offline tests — no network, sandboxed database
 ## Development
 
 ```sh
-uv sync              # dependencies and dev tools, from the lockfile
-uv run pytest        # 63 tests, no network
-uv run ruff check .  # lint
+make install    # uv sync
+make check      # ruff + ty + import-linter + 172 tests with a 90% coverage gate
+make test-live  # optional: read-only smoke against all six real boards
 ```
 
-CI runs the same three on Python 3.9 and 3.13, and starts the MCP server to
-verify it still completes a handshake.
+CI runs the same gate on Python 3.9 and 3.14, and starts the MCP server to
+verify it still completes a handshake. Architecture rules and contributor
+ground rules live in [CLAUDE.md](CLAUDE.md) and
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
