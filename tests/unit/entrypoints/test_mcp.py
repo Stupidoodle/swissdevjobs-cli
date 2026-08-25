@@ -476,3 +476,44 @@ def test_resources_and_prompts_are_empty_but_answered():
     for method, key in (("resources/list", "resources"), ("prompts/list", "prompts")):
         response = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": method})
         assert response["result"] == {key: []}
+
+
+# --- cross-platform filter parity -------------------------------------------
+
+
+def test_a_filter_the_board_cannot_serve_excludes_it_visibly(fresh_uow):
+    devit = FakeBoard(feed=[job()])
+    jobsch = FakeBoard(feed=[], board=registry.BOARDS["jobsch"])
+    rt = Runtime(
+        boards={"swissdevjobs": devit, "jobsch": jobsch},
+        uow=fresh_uow,
+        enabled=["swissdevjobs", "jobsch"],
+    )
+    result = call(rt, "search_jobs", remote=True)
+    assert result["boards_excluded"] == {"jobsch": ["remote"]}
+    assert result["boards_searched"] == ["swissdevjobs"]
+    assert "jobsch: no remote data" in result["note"]
+    assert jobsch.queries == [], "an excluded board must not even be fetched"
+    assert result["total_matching"] == 1
+
+
+def test_a_salary_filter_excludes_boards_without_salary_data(fresh_uow):
+    jobsch = FakeBoard(feed=[], board=registry.BOARDS["jobsch"])
+    rt = Runtime(boards={"jobsch": jobsch}, uow=fresh_uow, enabled=["jobsch"])
+    result = call(rt, "search_jobs", min_salary=120000)
+    assert result["boards_excluded"] == {"jobsch": ["salary"]}
+    assert result["boards_searched"] == []
+
+
+def test_tech_terms_reach_a_tagless_board_as_its_server_query(fresh_uow):
+    jobsch = FakeBoard(
+        feed=[job(filterTags=[], technologies=[])],
+        board=registry.BOARDS["jobsch"],
+    )
+    rt = Runtime(boards={"jobsch": jobsch}, uow=fresh_uow, enabled=["jobsch"])
+    result = call(rt, "search_jobs", tech=["Python", "AWS"])
+    assert jobsch.queries == [("Python AWS", None)]
+    assert "matched the tech terms server-side" in result["note"]
+    # The server-matched row survives the client-side tag filter.
+    assert result["total_matching"] == 1
+    assert "boards_excluded" not in result

@@ -108,6 +108,20 @@ capabilities in prose or schemas: the MCP `category` enum and the CLI
 `--category` choices derive from `registry.known_categories()`, and a
 `Board` entry declares `scope` ("it" or "all-industries") and
 `salary_published` alongside `search_driven`/`native_apply`.
+
+**Filter parity — every filter behaves the same on every board.** A board
+whose wire lacks a filter dimension declares it in
+`Board.filters_unavailable` ("salary", "remote", "visa", "level", "tech").
+Filtering on a missing dimension must never silently drop the board's rows
+(that reads as "searched, nothing matched" — a lie): `search.
+split_by_filterability` excludes the board up front and the result says so
+in `boards_excluded` plus the in-band `note`. One exception: a
+search-driven board missing only "tech" folds the tech terms into its
+server-side query (`search.server_query`; JobCloud ANDs multi-term
+queries, verified live) and its rows skip the client tag filter
+(`search.tech_for`). `tests/unit/service_layer/test_filter_parity.py`
+enforces the matrix over the live registry — a new board or a new filter
+param fails it until classified.
 Selectors — `--board` (aliases `--source`, `--country`), `SDJ_BOARDS`
 (fallback: the pre-0.5.1 `SDJ_COUNTRIES`), the MCP `board` param (deprecated
 alias `country`) — accept a source id (`jobsch`) or a country code (expands

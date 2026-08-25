@@ -506,6 +506,15 @@ $ sdj direct-apply some-workday-job --json
 | `--json` | summary rows in an envelope (see [Commands](#commands)) |
 | `--raw` | with `--json`: full raw wire rows in the pre-0.6 shape |
 
+**Every filter behaves the same on every board — or tells you it can't.**
+jobs.ch/jobup.ch publish no salary, workplace, visa, or experience-level
+data (their own site can't filter on those either), so filtering on one of
+them excludes those boards *visibly*: the JSON envelope carries
+`boards_excluded` and a `note`, the table prints the note on stderr —
+never a silent empty result. `--tech` still works there: the terms are
+matched server-side as full-text query (multi-term queries AND together).
+`sdj boards` shows each board's unavailable dimensions as data.
+
 <details>
 <summary>Why <code>--refresh</code> does more than skip the local cache</summary>
 

@@ -527,3 +527,38 @@ def test_stats_table_output(runtime, capsys):
     out = capsys.readouterr().out
     assert "Jobs cached:" in out
     assert "Database:" in out
+
+
+def test_remote_filter_excludes_boards_without_workplace_data(fresh_uow, capsys):
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
+    jobsch = FakeBoard(feed=[], board=BOARDS["jobsch"])
+    runtime = Runtime(
+        boards={"swissdevjobs": ch, "jobsch": jobsch},
+        uow=fresh_uow,
+        enabled=["swissdevjobs", "jobsch"],
+    )
+    assert run(runtime, "list", "--remote", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["boards_excluded"] == {"jobsch": ["remote"]}
+    assert payload["boards_searched"] == ["swissdevjobs"]
+    assert "jobsch: no remote data" in payload["note"]
+    assert jobsch.queries == []
+
+
+def test_tech_flag_folds_into_the_server_query_on_tagless_boards(fresh_uow, capsys):
+    jobsch = FakeBoard(
+        feed=[job(filterTags=[], technologies=[])], board=BOARDS["jobsch"]
+    )
+    runtime = Runtime(boards={"jobsch": jobsch}, uow=fresh_uow, enabled=["jobsch"])
+    assert run(runtime, "list", "--tech", "Python", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert jobsch.queries == [("Python", None)]
+    assert payload["returned"] == 1
+
+
+def test_the_table_view_prints_the_coverage_note_on_stderr(fresh_uow, capsys):
+    jobsch = FakeBoard(feed=[], board=BOARDS["jobsch"])
+    runtime = Runtime(boards={"jobsch": jobsch}, uow=fresh_uow, enabled=["jobsch"])
+    run(runtime, "list", "--min-salary", "120000")
+    err = capsys.readouterr().err
+    assert "note:" in err and "jobsch: no salary data" in err

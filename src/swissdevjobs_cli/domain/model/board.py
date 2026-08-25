@@ -23,6 +23,13 @@ class Board:
     ``scope`` says what the inventory covers ("it", or "all-industries" for
     general boards where a category filter narrows the search);
     ``salary_published`` is False where the wire carries no salary data.
+
+    ``filters_unavailable`` names the filter dimensions the platform's wire
+    simply does not carry ("salary", "remote", "visa", "level", "tech").
+    Filtering on a missing dimension must exclude the board *visibly* —
+    silently dropping every row reads as "searched, nothing matched", which
+    is a lie. A search-driven board missing only "tech" stays searchable:
+    the tech terms travel server-side as the query instead.
     """
 
     platform: str
@@ -35,3 +42,4 @@ class Board:
     native_apply: bool = True
     scope: str = "it"
     salary_published: bool = True
+    filters_unavailable: tuple = ()

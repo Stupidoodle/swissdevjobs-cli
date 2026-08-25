@@ -145,6 +145,7 @@ def _summary_list_payload(
     args: argparse.Namespace,
     runtime: bootstrap.Runtime,
     boards: list,
+    excluded: dict,
     filtered: list,
     counts: dict,
     page_info,
@@ -155,14 +156,13 @@ def _summary_list_payload(
         "returned": len(filtered),
         "boards_searched": [b.board.source for b in boards],
     }
-    # In-band steering survives context compaction; skill prose doesn't.
-    if not args.query and not args.category:
-        blind = [b.board.name for b in boards if b.board.search_driven]
-        if blind:
-            payload["note"] = (
-                f"{', '.join(blind)} returned newest postings only — "
-                "pass a query for coverage"
-            )
+    if excluded:
+        payload["boards_excluded"] = excluded
+    note = search.coverage_note(
+        boards, excluded, query=args.query, category=args.category, tech=args.tech
+    )
+    if note:
+        payload["note"] = note
     if page_info:
         page, total_pages, per = page_info
         payload["page"] = page
@@ -178,6 +178,8 @@ def _summary_list_payload(
 def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Search, filter, sort, and print the feed."""
     uow = runtime.uow
+    remote = True if args.remote else (False if args.onsite else None)
+    visa = True if args.visa else None
     boards = (
         [
             runtime.boards[s]
@@ -187,6 +189,17 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         if args.country
         else runtime.enabled_boards()
     )
+    boards, excluded = search.split_by_filterability(
+        boards,
+        search.requested_filters(
+            tech=args.tech,
+            remote=remote,
+            visa=visa,
+            level=args.level,
+            min_salary=args.min_salary,
+            max_salary=args.max_salary,
+        ),
+    )
     jobs = with_retry(
         runtime,
         search.list_jobs,
@@ -194,6 +207,7 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         boards,
         query=args.query,
         category=args.category,
+        tech=args.tech,
         force=args.refresh,
     )
     filtered = [
@@ -201,11 +215,11 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         for j in jobs
         if search.matches(
             j,
-            tech=args.tech,
+            tech=search.tech_for(j, args.tech),
             tech_any=not args.tech_all,
             location=args.location,
-            remote=(True if args.remote else (False if args.onsite else None)),
-            visa=(True if args.visa else None),
+            remote=remote,
+            visa=visa,
             level=args.level,
             min_salary=args.min_salary,
             max_salary=args.max_salary,
@@ -243,11 +257,16 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             payload = _raw_list_payload(filtered, counts, page_info)
         else:
             payload = _summary_list_payload(
-                args, runtime, boards, filtered, counts, page_info
+                args, runtime, boards, excluded, filtered, counts, page_info
             )
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
+    note = search.coverage_note(
+        boards, excluded, query=args.query, category=args.category, tech=args.tech
+    )
+    if note:
+        print(f"note: {note}", file=sys.stderr)
     if not filtered:
         print("No matching jobs.", file=sys.stderr)
         return 1
@@ -460,6 +479,8 @@ def cmd_boards(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             traits.append("search-driven")
         if not r["native_apply"]:
             traits.append("no-native-apply")
+        if r["filters_unavailable"]:
+            traits.append("unfilterable: " + ", ".join(r["filters_unavailable"]))
         if r["categories"]:
             traits.append("categories: " + ", ".join(r["categories"]))
         line = (

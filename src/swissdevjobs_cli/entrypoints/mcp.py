@@ -114,14 +114,26 @@ def tool_search_jobs(
     alias (``board`` wins when both are passed).
     """
     uow = runtime.uow
-    board_clients = _boards_for(runtime, board or country)
-    jobs = search.list_jobs(uow, board_clients, query=query, category=category)
+    wanted = search.requested_filters(
+        tech=tech,
+        remote=remote,
+        visa=visa,
+        level=level,
+        min_salary=min_salary,
+        max_salary=max_salary,
+    )
+    board_clients, excluded = search.split_by_filterability(
+        _boards_for(runtime, board or country), wanted
+    )
+    jobs = search.list_jobs(
+        uow, board_clients, query=query, category=category, tech=tech
+    )
     hits = [
         j
         for j in jobs
         if search.matches(
             j,
-            tech=tech,
+            tech=search.tech_for(j, tech),
             tech_any=not tech_all,
             location=location,
             remote=remote,
@@ -151,14 +163,13 @@ def tool_search_jobs(
         "returned": min(limit, total),
         "boards_searched": [b.board.source for b in board_clients],
     }
-    # In-band steering survives context compaction; skill prose doesn't.
-    if not query and not category:
-        blind = [b.board.name for b in board_clients if b.board.search_driven]
-        if blind:
-            result["note"] = (
-                f"{', '.join(blind)} returned newest postings only — "
-                "pass query for coverage"
-            )
+    if excluded:
+        result["boards_excluded"] = excluded
+    note = search.coverage_note(
+        board_clients, excluded, query=query, category=category, tech=tech
+    )
+    if note:
+        result["note"] = note
     result["jobs"] = [_summarize(runtime, j) for j in hits[:limit]]
     return result
 

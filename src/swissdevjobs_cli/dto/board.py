@@ -20,6 +20,7 @@ class BoardDTO:
     currency: str
     scope: str
     salary_published: bool
+    filters_unavailable: list[str]
     search_driven: bool
     native_apply: bool
     categories: list[str]
@@ -39,6 +40,7 @@ class BoardDTO:
             currency=board.currency,
             scope=board.scope,
             salary_published=board.salary_published,
+            filters_unavailable=list(board.filters_unavailable),
             search_driven=board.search_driven,
             native_apply=board.native_apply,
             categories=categories,
@@ -56,6 +58,7 @@ class BoardDTO:
             "currency": self.currency,
             "scope": self.scope,
             "salary_published": self.salary_published,
+            "filters_unavailable": self.filters_unavailable,
             "search_driven": self.search_driven,
             "native_apply": self.native_apply,
             "categories": self.categories,

@@ -21,6 +21,7 @@ def list_jobs(
     *,
     query: str | None = None,
     category: str | None = None,
+    tech: list[str] | None = None,
     max_age_seconds: int = 600,
     force: bool = False,
 ) -> list[Job]:
@@ -37,10 +38,120 @@ def list_jobs(
         if not board.board.search_driven and not force:
             jobs = uow.jobs.cached_jobs(board.board.source, max_age_seconds)
         if jobs is None:
-            jobs = board.fetch_jobs(query=query, category=category, force=force)
+            jobs = board.fetch_jobs(
+                query=server_query(board.board, query, tech),
+                category=category,
+                force=force,
+            )
             uow.jobs.store_jobs(jobs)
         combined.extend(jobs)
     return combined
+
+
+def server_query(board, query: str | None, tech: list[str] | None) -> str | None:
+    """The query one board matches server-side.
+
+    Boards that publish no technology tags fold the tech terms into their
+    full-text query — the only place those terms can match at all (verified
+    live: JobCloud ANDs multi-term queries, so folding narrows correctly).
+    """
+    if not board.search_driven or "tech" not in board.filters_unavailable:
+        return query
+    terms = ([query] if query else []) + list(tech or [])
+    return " ".join(terms) or None
+
+
+def requested_filters(
+    *,
+    tech: list[str] | None = None,
+    remote: bool | None = None,
+    visa: bool | None = None,
+    level: str | None = None,
+    min_salary: int | None = None,
+    max_salary: int | None = None,
+) -> set:
+    """The filter dimensions this call actually asked for."""
+    wanted = set()
+    if tech:
+        wanted.add("tech")
+    if remote is not None:
+        wanted.add("remote")
+    if visa is True:
+        wanted.add("visa")
+    if level:
+        wanted.add("level")
+    if min_salary is not None or max_salary is not None:
+        wanted.add("salary")
+    return wanted
+
+
+def split_by_filterability(
+    boards: Sequence[BoardPort], wanted: set
+) -> tuple[list, dict]:
+    """(searchable, excluded): who can serve these filters, who cannot.
+
+    A board missing a requested dimension is excluded up front — filtering
+    its rows on data that does not exist would silently drop all of them,
+    which reads as "searched, nothing matched". The one exception: a
+    search-driven board missing only "tech" stays searchable, because the
+    tech terms travel server-side as its query (see ``server_query``).
+    """
+    searchable: list = []
+    excluded: dict = {}
+    for board in boards:
+        missing = [d for d in board.board.filters_unavailable if d in wanted]
+        if missing and not (missing == ["tech"] and board.board.search_driven):
+            excluded[board.board.source] = missing
+        else:
+            searchable.append(board)
+    return searchable, excluded
+
+
+def coverage_note(
+    boards: Sequence[BoardPort],
+    excluded: Mapping[str, list],
+    *,
+    query: str | None,
+    category: str | None,
+    tech: list[str] | None,
+) -> str | None:
+    """One in-band sentence on coverage gaps; None when coverage is honest.
+
+    In-band steering survives context compaction; skill prose doesn't.
+    """
+    parts = []
+    blind = [
+        b.board.name
+        for b in boards
+        if b.board.search_driven
+        and not query
+        and not category
+        and not server_query(b.board, query, tech)
+    ]
+    if blind:
+        parts.append(
+            f"{', '.join(blind)} returned newest postings only — "
+            "pass a query for coverage"
+        )
+    folded = [
+        b.board.name
+        for b in boards
+        if tech and b.board.search_driven and "tech" in b.board.filters_unavailable
+    ]
+    if folded:
+        parts.append(
+            f"{', '.join(folded)} matched the tech terms server-side "
+            "(full-text, all terms required)"
+        )
+    if excluded:
+        detail = "; ".join(
+            f"{source}: no {', '.join(dims)} data" for source, dims in excluded.items()
+        )
+        parts.append(
+            f"boards excluded — their platform publishes none of the "
+            f"filtered data ({detail}); drop those filters to search them"
+        )
+    return " | ".join(parts) or None
 
 
 def resolve_jobs(uow: UnitOfWork, boards: Sequence[BoardPort]) -> list[Job]:
@@ -87,6 +198,16 @@ def query_for(job: Job, query: str | None) -> str | None:
     fields the light row doesn't carry (the description, most of all).
     """
     return None if job.board.search_driven else query
+
+
+def tech_for(job: Job, tech: list[str] | None) -> list[str] | None:
+    """The client-side tech tags for one row.
+
+    Rows from boards without tech tags matched the terms server-side (they
+    travelled as the query) — re-filtering on their always-empty tag list
+    would drop every hit the server found.
+    """
+    return None if "tech" in job.board.filters_unavailable else tech
 
 
 def resolve(jobs: list[Job], query: str) -> Job | None:

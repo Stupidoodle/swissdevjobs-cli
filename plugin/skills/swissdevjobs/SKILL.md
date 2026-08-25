@@ -16,7 +16,12 @@ Swiss board).
 a `query` they only return their newest postings — always pass the user's
 actual search terms for real coverage there, and pass a `category` alias to
 keep all-industry boards on topic. The search result carries a `note` when
-coverage was newest-only. Summary rows omit empty fields entirely and carry
+coverage was newest-only, and a `boards_excluded` map when a requested
+filter (salary, remote, visa, level) does not exist on a board's wire —
+those boards were not searched at all, not searched-and-empty; drop the
+filter to include them. A `tech` filter still works on tagless boards: the
+terms are matched server-side as full text (the note says so).
+Summary rows omit empty fields entirely and carry
 salary as numbers (`salary_from`/`salary_to` + `currency`); rows without
 them come from boards that publish no salary data — that is the platform,
 not a bug.
