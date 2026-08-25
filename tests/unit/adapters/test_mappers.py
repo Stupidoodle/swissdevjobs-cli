@@ -36,7 +36,9 @@ def _row(**cols):
     conn.execute(
         f"INSERT INTO jobs ({keys}) VALUES ({placeholders})", list(base.values())
     )
-    return conn.execute("SELECT * FROM jobs").fetchone()
+    row = conn.execute("SELECT * FROM jobs").fetchone()
+    conn.close()
+    return row
 
 
 def test_a_row_without_light_json_falls_back_to_columns():

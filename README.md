@@ -148,6 +148,9 @@ Then edit the file:
 SDJ_NAME="Your Name"
 SDJ_EMAIL="you@example.com"
 SDJ_CV="/absolute/path/to/cv.pdf"
+
+# Optional: which boards to search (default: all)
+# SDJ_COUNTRIES=ch,de
 ```
 
 ### Where settings come from
@@ -605,7 +608,8 @@ the list, **1 h** for detail.
 erDiagram
     JOBS {
         text _id PK "MongoDB ObjectId"
-        text job_url UK "slug"
+        text source "which board (unique with job_url)"
+        text job_url "slug"
         text company
         text name "role title"
         int  annual_salary_from
@@ -613,7 +617,8 @@ erDiagram
         text candidate_contact_way "Email | CompanyWebsite"
         text email_address "null when external"
         text redirect_url "the ATS link"
-        text detail_json "full payload"
+        text light_json "full normalized feed row"
+        text detail_json "full detail payload"
         text light_fetched_at
         text detail_fetched_at
     }
@@ -631,13 +636,15 @@ erDiagram
 ```
 
 Deduplication runs on `job_id` first, then falls back to `(company, role)` so an
-application you made through LinkedIn still suppresses the same role here.
+application you made through LinkedIn — or on a different board — still
+suppresses the same role everywhere. Cache freshness and slug uniqueness are
+per board (`UNIQUE(source, job_url)`).
 
 ---
 
 ## Cloudflare
 
-swissdevjobs.ch sits behind Cloudflare. Ordinary use sails through; bursts and
+All six boards sit behind Cloudflare. Ordinary use sails through; bursts and
 datacenter IPs can trip a managed challenge.
 
 **There is no automated solver here, by design.** A headless client can't run the JS
@@ -647,7 +654,7 @@ the CLI hands the problem to a real human in a real browser:
 1. The command blocks and prints the URL.
 2. Your default browser opens it.
 3. You clear the challenge, then copy `cf_clearance` from
-   **DevTools → Application → Cookies → `.swissdevjobs.ch`**.
+   **DevTools → Application → Cookies** (on the challenged board's domain).
 4. Paste it back. It's stored in a Netscape cookie jar at
    `~/.config/swissdevjobs-cli/cookies.txt` and the original request retries.
 

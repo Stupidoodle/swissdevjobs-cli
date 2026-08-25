@@ -31,6 +31,9 @@ SDJ_EMAIL="you@example.com"
 # Optional: default CV, so you can omit --cv
 # SDJ_CV=/absolute/path/to/cv.pdf
 
+# Optional: which boards to search — ISO country codes or "all" (default)
+# SDJ_COUNTRIES=ch,de
+
 # Optional: override where the cache database and cookie jar live
 # SDJ_CACHE_DIR=~/.cache/swissdevjobs-cli
 # SDJ_CONFIG_DIR=~/.config/swissdevjobs-cli
