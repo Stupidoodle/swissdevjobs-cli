@@ -1,1 +1,11 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Feature ideas & design
+    url: https://github.com/Stupidoodle/swissdevjobs-cli/discussions/categories/ideas
+    about: Roadmap and design discussion lives here, not in the issue tracker.
+  - name: Questions
+    url: https://github.com/Stupidoodle/swissdevjobs-cli/discussions/categories/q-a
+    about: Ask anything about the CLI, the MCP server, or the plugin.
+  - name: Show and tell
+    url: https://github.com/Stupidoodle/swissdevjobs-cli/discussions/categories/show-and-tell
+    about: Landed an interview or an offer with help from the tool? Tell the story.
