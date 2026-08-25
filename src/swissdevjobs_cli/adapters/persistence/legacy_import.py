@@ -48,7 +48,7 @@ def import_json_cache(jobs_repo, cache_dir: Path) -> int:
     from swissdevjobs_cli.adapters.boards.registry import BOARDS
     from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
 
-    board = BOARDS["ch"]
+    board = BOARDS["swissdevjobs"]
 
     imported = 0
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +29,18 @@ class DevITJobsClient:
         self.board = board
         self._http = http
 
-    def fetch_jobs(self, *, force: bool = False) -> list[Job]:
+    def fetch_jobs(
+        self,
+        *,
+        query: str | None = None,
+        category: str | None = None,
+        force: bool = False,
+    ) -> list[Job]:
         """Fetch the full lightweight feed from the board.
+
+        ``query`` and ``category`` are ignored on purpose: the feed is
+        complete and all-IT already, so free-text matching happens
+        client-side in the service layer.
 
         On a forced refresh, bust Cloudflare's edge cache. `/api/jobsLight` is
         served with `Cache-Control: max-age=3600` and CF will happily hand back
@@ -47,6 +58,14 @@ class DevITJobsClient:
         """Fetch the full posting for one job id."""
         wire = json.loads(self._http.get(f"/api/job/{job_id}").decode("utf-8"))
         return acl.detail_from_wire(wire, self.board)
+
+    def hydrate_detail(self, raw: Mapping[str, Any]) -> JobDetail:
+        """A cached raw detail payload → domain JobDetail."""
+        return acl.detail_from_wire(raw, self.board)
+
+    def posting_url(self, raw: Mapping[str, Any]) -> str:
+        """The public URL of a posting on this board."""
+        return acl.posting_url(self.board, raw.get("jobUrl") or "")
 
     def submit_application(
         self, detail: JobDetail, applicant: Applicant, motivation: str

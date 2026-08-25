@@ -8,6 +8,7 @@ while typed fields exist for the logic that filters, sorts, and identifies.
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -19,12 +20,16 @@ from swissdevjobs_cli.domain.model.salary import SalaryRange
 
 
 def strip_html(text: str) -> str:
-    """Flatten the HTML the API returns in description/requirement fields."""
+    """Flatten the HTML the API returns in description/requirement fields.
+
+    Entities are unescaped AFTER tag removal — jobs.ch templates carry
+    literal `&amp;` and friends in their text nodes.
+    """
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
     text = re.sub(r"</p>", "\n\n", text, flags=re.I)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+    return html.unescape(text).strip()
 
 
 @dataclass(frozen=True)

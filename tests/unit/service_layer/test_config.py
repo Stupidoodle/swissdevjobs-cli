@@ -1,37 +1,26 @@
-"""Enabled-countries resolution and applicant identity."""
+"""Selector-token parsing and applicant identity."""
 
 from __future__ import annotations
 
 from swissdevjobs_cli.domain.model.application import Applicant
-from swissdevjobs_cli.service_layer.config import enabled_countries, resolve_applicant
+from swissdevjobs_cli.service_layer.config import resolve_applicant, selector_tokens
 
-KNOWN = ["ch", "de", "uk", "us", "nl", "fr"]
 LABELS = ("name/$SDJ_NAME", "email/$SDJ_EMAIL", "cv/$SDJ_CV")
 
 
-def test_default_is_every_board(monkeypatch):
+def test_default_is_all(monkeypatch):
     monkeypatch.delenv("SDJ_COUNTRIES", raising=False)
-    assert enabled_countries(KNOWN) == KNOWN
+    assert selector_tokens() == ["all"]
 
 
-def test_all_means_every_board(monkeypatch):
-    monkeypatch.setenv("SDJ_COUNTRIES", "all")
-    assert enabled_countries(KNOWN) == KNOWN
+def test_a_csv_yields_cleaned_tokens(monkeypatch):
+    monkeypatch.setenv("SDJ_COUNTRIES", " CH, jobsch ,, de ")
+    assert selector_tokens() == ["ch", "jobsch", "de"]
 
 
-def test_a_csv_selects_a_subset(monkeypatch):
-    monkeypatch.setenv("SDJ_COUNTRIES", "ch, de")
-    assert enabled_countries(KNOWN) == ["ch", "de"]
-
-
-def test_unknown_codes_are_dropped_not_fatal(monkeypatch):
-    monkeypatch.setenv("SDJ_COUNTRIES", "ch,atlantis")
-    assert enabled_countries(KNOWN) == ["ch"]
-
-
-def test_all_unknown_falls_back_to_every_board(monkeypatch):
-    monkeypatch.setenv("SDJ_COUNTRIES", "atlantis")
-    assert enabled_countries(KNOWN) == KNOWN
+def test_an_empty_variable_means_all(monkeypatch):
+    monkeypatch.setenv("SDJ_COUNTRIES", "   ")
+    assert selector_tokens() == ["all"]
 
 
 def test_identity_resolves_from_arguments():

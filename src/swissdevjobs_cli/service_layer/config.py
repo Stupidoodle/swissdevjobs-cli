@@ -8,18 +8,14 @@ from typing import Any
 from swissdevjobs_cli.domain.model.application import Applicant
 
 
-def enabled_countries(known: list[str]) -> list[str]:
-    """Which boards to search, from $SDJ_COUNTRIES ("all" or "ch,de"; default all).
+def selector_tokens() -> list[str]:
+    """The board selectors from $SDJ_COUNTRIES ("all", "ch,de", "jobsch", …).
 
-    Unknown codes are ignored rather than fatal — a typo in a .env file must
-    not brick every command. An empty result falls back to all boards.
+    Tokens are country codes or board source ids; the registry resolves them.
+    An empty variable means "all".
     """
-    value = (os.environ.get("SDJ_COUNTRIES") or "all").strip().lower()
-    if value in ("", "all"):
-        return list(known)
-    picked = [c.strip() for c in value.split(",")]
-    valid = [c for c in picked if c in known]
-    return valid or list(known)
+    value = (os.environ.get("SDJ_COUNTRIES") or "").strip().lower()
+    return [t.strip() for t in value.split(",") if t.strip()] or ["all"]
 
 
 def resolve_applicant(

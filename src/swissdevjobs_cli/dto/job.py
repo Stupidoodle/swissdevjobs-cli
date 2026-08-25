@@ -25,6 +25,7 @@ class JobSummaryDTO:
     technologies: list[str]
     posted_at: str | None
     country: str
+    source: str
     url: str
 
     @classmethod
@@ -33,6 +34,7 @@ class JobSummaryDTO:
         raw = job.raw
         return cls(
             country=job.board.country,
+            source=job.board.source,
             job_id=raw.get("_id"),
             title=raw.get("name"),
             company=raw.get("company"),
@@ -62,6 +64,7 @@ class JobSummaryDTO:
             "technologies": self.technologies,
             "posted_at": self.posted_at,
             "country": self.country,
+            "source": self.source,
             "url": self.url,
         }
 
@@ -97,10 +100,15 @@ class JobDetailDTO:
         posting_url: str,
         applied: dict[str, Any] | None = None,
     ) -> JobDetailDTO:
-        """Build from a domain JobDetail; `direct` is always the preferred mode."""
+        """Build from a domain JobDetail.
+
+        `direct` is the preferred mode wherever the board has a native apply
+        form; boards without one (jobs.ch, jobup.ch) are `browser` — the
+        posting's ATS is the only channel.
+        """
         raw = detail.raw
         return cls(
-            mode="direct",
+            mode="direct" if detail.board.native_apply else "browser",
             fallback_mode=fallback_mode(detail),
             job_id=str(detail.id),
             title=raw.get("name"),

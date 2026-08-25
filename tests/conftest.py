@@ -30,7 +30,7 @@ from swissdevjobs_cli.adapters.persistence.unit_of_work import (  # noqa: E402
     SqliteUnitOfWork,
 )
 
-CH = BOARDS["ch"]
+CH = BOARDS["swissdevjobs"]
 
 
 def test_sandbox_is_active():

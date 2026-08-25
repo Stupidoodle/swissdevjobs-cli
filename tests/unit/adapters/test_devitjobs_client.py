@@ -44,21 +44,21 @@ def applicant(**overrides):
 
 def test_fetch_jobs_normalizes_through_the_acl():
     http = FakeHttp({"/api/jobsLight": [job()]})
-    client = DevITJobsClient(BOARDS["de"], http)
+    client = DevITJobsClient(BOARDS["germantechjobs"], http)
     jobs = client.fetch_jobs()
-    assert jobs[0].board is BOARDS["de"]
+    assert jobs[0].board is BOARDS["germantechjobs"]
     assert jobs[0].salary.currency == "EUR"
 
 
 def test_a_forced_refresh_busts_the_edge_cache():
     http = FakeHttp({"/api/jobsLight": []})
-    DevITJobsClient(BOARDS["ch"], http).fetch_jobs(force=True)
+    DevITJobsClient(BOARDS["swissdevjobs"], http).fetch_jobs(force=True)
     assert "?_cb=" in http.gets[0]
 
 
 def test_fetch_detail_hits_the_job_endpoint():
     http = FakeHttp({"/api/job/abc123": job(description="<p>x</p>")})
-    detail = DevITJobsClient(BOARDS["ch"], http).fetch_detail("abc123")
+    detail = DevITJobsClient(BOARDS["swissdevjobs"], http).fetch_detail("abc123")
     assert detail.raw["description"] == "<p>x</p>"
 
 
@@ -66,7 +66,7 @@ def test_submit_builds_the_native_form(tmp_path):
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
     http = FakeHttp({})
-    client = DevITJobsClient(BOARDS["ch"], http)
+    client = DevITJobsClient(BOARDS["swissdevjobs"], http)
     detail = client_detail(job(hasLangCheck=True))
     result = client.submit_application(detail, applicant(cv_path=str(cv)), "Dear team")
     assert result["status"] == 200
@@ -87,4 +87,4 @@ def test_submit_builds_the_native_form(tmp_path):
 def client_detail(wire):
     from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
 
-    return acl.detail_from_wire(wire, BOARDS["ch"])
+    return acl.detail_from_wire(wire, BOARDS["swissdevjobs"])

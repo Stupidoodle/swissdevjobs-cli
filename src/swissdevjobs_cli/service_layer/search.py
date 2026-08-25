@@ -6,29 +6,57 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
 from swissdevjobs_cli.domain.model.job import Job, JobDetail
 from swissdevjobs_cli.domain.ports.board_port import BoardPort
 from swissdevjobs_cli.domain.ports.unit_of_work import UnitOfWork
+
+# resolve_jobs serves anything the cache ever held: you can only show or
+# apply to what a past listing surfaced, however long ago that was.
+_ANY_AGE = 10**10
 
 
 def list_jobs(
     uow: UnitOfWork,
     boards: Sequence[BoardPort],
     *,
+    query: str | None = None,
+    category: str | None = None,
     max_age_seconds: int = 600,
     force: bool = False,
 ) -> list[Job]:
-    """The combined feed of every requested board, each cached independently."""
+    """The browse corpus of every requested board.
+
+    Feed boards serve their cached full feed when fresh enough. Search-driven
+    boards always ask the server — their cache is an accumulation of past
+    query slices, so it is never a truthful browse corpus — and their fresh
+    rows are stored so show/apply can resolve them later.
+    """
     combined: list[Job] = []
     for board in boards:
         jobs = None
-        if not force:
+        if not board.board.search_driven and not force:
             jobs = uow.jobs.cached_jobs(board.board.source, max_age_seconds)
         if jobs is None:
-            jobs = board.fetch_jobs(force=force)
+            jobs = board.fetch_jobs(query=query, category=category, force=force)
             uow.jobs.store_jobs(jobs)
         combined.extend(jobs)
+    return combined
+
+
+def resolve_jobs(uow: UnitOfWork, boards: Sequence[BoardPort]) -> list[Job]:
+    """The resolve corpus: every cached row, any age, plus never-fetched feeds.
+
+    Resolution must be cheap and offline-stable — `sdj show` right after
+    `sdj list` must not refetch anything, least of all a search-driven
+    board's ten pages.
+    """
+    combined: list[Job] = []
+    for board in boards:
+        jobs = uow.jobs.cached_jobs(board.board.source, _ANY_AGE)
+        if jobs is None and not board.board.search_driven:
+            jobs = board.fetch_jobs()
+            uow.jobs.store_jobs(jobs)
+        combined.extend(jobs or [])
     return combined
 
 
@@ -44,11 +72,21 @@ def get_detail(
     if not force:
         cached = uow.jobs.cached_detail(job_id, max_age_seconds)
         if cached is not None:
-            return acl.detail_from_wire(cached, board.board)
+            return board.hydrate_detail(cached)
 
     detail = board.fetch_detail(job_id)
     uow.jobs.store_detail(job_id, dict(detail.raw))
     return detail
+
+
+def query_for(job: Job, query: str | None) -> str | None:
+    """The client-side query for one row.
+
+    Rows from a search-driven board were already matched server-side —
+    re-applying the query client-side would drop hits the server found in
+    fields the light row doesn't carry (the description, most of all).
+    """
+    return None if job.board.search_driven else query
 
 
 def resolve(jobs: list[Job], query: str) -> Job | None:

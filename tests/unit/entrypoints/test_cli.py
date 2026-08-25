@@ -23,7 +23,9 @@ def board():
 
 @pytest.fixture
 def runtime(board, fresh_uow):
-    return Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
+    return Runtime(
+        boards={"swissdevjobs": board}, uow=fresh_uow, enabled=["swissdevjobs"]
+    )
 
 
 def run(runtime, *argv):
@@ -45,7 +47,7 @@ def test_list_table_has_a_header_and_the_country_column(runtime, capsys):
     assert run(runtime, "list") == 0
     out = capsys.readouterr().out
     assert "1 shown · 1 match filters · 1 in feed" in out
-    assert "  ch " in out
+    assert "swissdevjobs" in out
     assert "CHF 130'000–160'000" in out
 
 
@@ -215,7 +217,9 @@ def test_direct_apply_refuses_an_undeliverable_posting(fresh_uow, tmp_path, caps
             redirectJobUrl="https://acme.wd3.myworkdayjobs.com/x",
         ),
     )
-    runtime = Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
+    runtime = Runtime(
+        boards={"swissdevjobs": board}, uow=fresh_uow, enabled=["swissdevjobs"]
+    )
     cv = tmp_path / "cv.pdf"
     cv.write_bytes(b"%PDF-1.4")
     rc = run(
@@ -263,13 +267,13 @@ def test_stats_reports_counters(runtime, fresh_uow, capsys):
 def test_config_shows_enabled_boards(runtime, capsys):
     assert run(runtime, "config") == 0
     out = capsys.readouterr().out
-    assert "enabled      ch" in out
+    assert "enabled      swissdevjobs" in out
     assert "SDJ_NAME" in out
 
 
 def test_config_countries_rejects_unknown_codes(runtime, capsys):
     assert run(runtime, "config", "--countries", "ch,atlantis") == 1
-    assert "unknown country code" in capsys.readouterr().err
+    assert "unknown board selector" in capsys.readouterr().err
 
 
 def test_config_countries_persists(runtime, tmp_path, monkeypatch, capsys):
@@ -280,12 +284,16 @@ def test_config_countries_persists(runtime, tmp_path, monkeypatch, capsys):
 
 
 def test_country_flag_narrows_the_boards(fresh_uow, capsys):
-    ch = FakeBoard(feed=[job()], board=BOARDS["ch"])
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
     de = FakeBoard(
         feed=[job(_id="68b0000057370f0152e4950e", jobUrl="de-role")],
-        board=BOARDS["de"],
+        board=BOARDS["germantechjobs"],
     )
-    runtime = Runtime(boards={"ch": ch, "de": de}, uow=fresh_uow, enabled=["ch", "de"])
+    runtime = Runtime(
+        boards={"swissdevjobs": ch, "germantechjobs": de},
+        uow=fresh_uow,
+        enabled=["swissdevjobs", "germantechjobs"],
+    )
     assert run(runtime, "list", "--country", "de", "--json") == 0
     rows = json.loads(capsys.readouterr().out)
     assert {r["country"] for r in rows} == {"de"}
@@ -333,7 +341,7 @@ def test_with_retry_reraises_when_the_user_aborts(runtime, monkeypatch):
 def test_main_maps_an_unresolved_challenge_to_exit_2(runtime, monkeypatch, capsys):
     from swissdevjobs_cli.adapters.http.client import CaptchaRequired
 
-    board = runtime.boards["ch"]
+    board = runtime.boards["swissdevjobs"]
     board.raises = CaptchaRequired("https://swissdevjobs.ch/", 403, "")
     monkeypatch.setattr(cli, "interactive_unblock", lambda url: False)
     monkeypatch.setattr(cli.bootstrap, "build_runtime", lambda: runtime)
@@ -422,7 +430,9 @@ def test_apply_text_mode_shows_fallback_and_questions(fresh_uow, capsys, monkeyp
             applyQuestions=[{"question": "Why us?"}],
         ),
     )
-    runtime = Runtime(boards={"ch": board}, uow=fresh_uow, enabled=["ch"])
+    runtime = Runtime(
+        boards={"swissdevjobs": board}, uow=fresh_uow, enabled=["swissdevjobs"]
+    )
     opened = []
     monkeypatch.setattr(cli.webbrowser, "open", lambda url, new=0: opened.append(url))
     assert run(runtime, "apply", "acme", "--open") == 0

@@ -56,10 +56,15 @@ def row_to_wire(row: sqlite3.Row) -> dict[str, Any]:
 
 def row_to_job(row: sqlite3.Row) -> Job:
     """A cached jobs row → domain Job. The row's `source` names its board."""
-    from swissdevjobs_cli.adapters.boards.registry import BOARDS, SOURCE_TO_BOARD
+    from swissdevjobs_cli.adapters.boards.registry import (
+        FALLBACK_SOURCE,
+        SOURCE_TO_BOARD,
+    )
 
     raw = row_to_wire(row)
-    board = SOURCE_TO_BOARD.get(row["source"], BOARDS["ch"])
+    # Rows cached by older versions predate the `source` raw key.
+    raw.setdefault("source", row["source"])
+    board = SOURCE_TO_BOARD.get(row["source"], SOURCE_TO_BOARD[FALLBACK_SOURCE])
     return Job(
         id=JobId(raw.get("_id") or ""),
         slug=raw.get("jobUrl") or "",

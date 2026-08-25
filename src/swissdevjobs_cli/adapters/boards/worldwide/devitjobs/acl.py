@@ -39,9 +39,10 @@ def _decorate_posted_at(wire: dict[str, Any]) -> dict[str, Any]:
 
 
 def job_from_wire(wire: Mapping[str, Any], board: Board) -> Job:
-    """One jobsLight row → domain Job. Decorates raw with postedAt + country."""
+    """One jobsLight row → domain Job. Decorates raw with postedAt + board tags."""
     raw = _decorate_posted_at(dict(wire))
     raw["country"] = board.country
+    raw["source"] = board.source
     return Job(
         id=JobId(raw.get("_id") or ""),
         slug=raw.get("jobUrl") or "",
@@ -61,9 +62,10 @@ def jobs_from_wire(wire_rows: list[Mapping[str, Any]], board: Board) -> list[Job
 
 
 def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
-    """A job-detail payload → domain JobDetail. Raw gains only a country tag."""
+    """A job-detail payload → domain JobDetail. Raw gains only board tags."""
     raw = dict(wire)
     raw["country"] = board.country
+    raw["source"] = board.source
     return JobDetail(
         id=JobId(wire.get("_id") or ""),
         slug=wire.get("jobUrl") or "",

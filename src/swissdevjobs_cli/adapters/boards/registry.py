@@ -1,9 +1,13 @@
-"""Every known board, selectable by lowercase ISO country code.
+"""Every known board, keyed by its unique source id.
 
-All six run the same devitjobs backend (verified live: identical
-/api/jobsLight, /api/job/{id}, and /api/jobApply behavior), so one client
-class covers the whole platform. `us` covers the US and Canada —
-devitjobs.us 301-redirects to devitjobs.com, which lists both.
+Selectors (CLI flags, ``SDJ_COUNTRIES``, MCP params) accept either a source
+id ("jobsch") or a country code ("ch" — expands to every board in that
+country), so the day a country gains a second board nothing user-facing
+breaks. The devitjobs six share one backend (verified live: identical
+/api/jobsLight, /api/job/{id}, and /api/jobApply behavior); `us` covers the
+US and Canada — devitjobs.us 301-redirects to devitjobs.com, which lists
+both. jobs.ch and jobup.ch share the JobCloud backend: all-industries,
+query-driven, no native apply.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from __future__ import annotations
 from swissdevjobs_cli.domain.model.board import Board
 
 BOARDS: dict[str, Board] = {
-    "ch": Board(
+    "swissdevjobs": Board(
         platform="devitjobs",
         country="ch",
         base_url="https://swissdevjobs.ch",
@@ -19,7 +23,7 @@ BOARDS: dict[str, Board] = {
         currency="CHF",
         source="swissdevjobs",
     ),
-    "de": Board(
+    "germantechjobs": Board(
         platform="devitjobs",
         country="de",
         base_url="https://germantechjobs.de",
@@ -27,7 +31,7 @@ BOARDS: dict[str, Board] = {
         currency="EUR",
         source="germantechjobs",
     ),
-    "uk": Board(
+    "devitjobs-uk": Board(
         platform="devitjobs",
         country="uk",
         base_url="https://devitjobs.uk",
@@ -35,7 +39,7 @@ BOARDS: dict[str, Board] = {
         currency="GBP",
         source="devitjobs-uk",
     ),
-    "us": Board(
+    "devitjobs-us": Board(
         platform="devitjobs",
         country="us",
         base_url="https://devitjobs.com",
@@ -43,7 +47,7 @@ BOARDS: dict[str, Board] = {
         currency="USD",
         source="devitjobs-us",
     ),
-    "nl": Board(
+    "devitjobs-nl": Board(
         platform="devitjobs",
         country="nl",
         base_url="https://devitjobs.nl",
@@ -51,7 +55,7 @@ BOARDS: dict[str, Board] = {
         currency="EUR",
         source="devitjobs-nl",
     ),
-    "fr": Board(
+    "devitjobs-fr": Board(
         platform="devitjobs",
         country="fr",
         base_url="https://devitjobs.fr",
@@ -59,8 +63,54 @@ BOARDS: dict[str, Board] = {
         currency="EUR",
         source="devitjobs-fr",
     ),
+    "jobsch": Board(
+        platform="jobcloud",
+        country="ch",
+        base_url="https://www.jobs.ch",
+        name="jobs.ch",
+        currency="CHF",
+        source="jobsch",
+        search_driven=True,
+        native_apply=False,
+    ),
+    "jobup": Board(
+        platform="jobcloud",
+        country="ch",
+        base_url="https://www.jobup.ch",
+        name="jobup.ch",
+        currency="CHF",
+        source="jobup",
+        search_driven=True,
+        native_apply=False,
+    ),
 }
 
-SOURCE_TO_BOARD: dict[str, Board] = {b.source: b for b in BOARDS.values()}
+SOURCE_TO_BOARD: dict[str, Board] = dict(BOARDS)
 
-DEFAULT_COUNTRY = "ch"
+# The board every unknown cached `source` value falls back to (rows written
+# by a version that knew a since-removed board must still render).
+FALLBACK_SOURCE = "swissdevjobs"
+
+
+def known_selectors() -> list[str]:
+    """Every token a user may select boards by: country codes and source ids."""
+    countries = {b.country for b in BOARDS.values()}
+    return sorted(countries | set(BOARDS))
+
+
+def resolve_selectors(tokens: list[str]) -> list[str]:
+    """Selector tokens → source ids, in registry order, deduplicated.
+
+    A token matches a board by source id or by country code; "all" (or an
+    empty/unknown-only list) selects every board. Unknown tokens are ignored
+    rather than fatal — a typo in a .env file must not brick every command.
+    """
+    cleaned = [t.strip().lower() for t in tokens if t.strip()]
+    if not cleaned or "all" in cleaned:
+        return list(BOARDS)
+    picked = [
+        source
+        for source, board in BOARDS.items()
+        if source in cleaned or board.country in cleaned
+    ]
+    return picked or list(BOARDS)

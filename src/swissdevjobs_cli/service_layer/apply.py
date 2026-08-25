@@ -41,6 +41,24 @@ def undeliverable(detail: JobDetail) -> dict[str, Any] | None:
     redirect = detail.redirect_url or ""
     raw = detail.raw
 
+    # Boards without a native apply endpoint (jobs.ch, jobup.ch) can never
+    # deliver a direct submission — the posting's ATS is the only channel.
+    if not detail.board.native_apply:
+        return {
+            "error": "no_native_apply",
+            "next_action": "use_chrome_mcp",
+            "apply_url": detail.redirect_url,
+            "aggregator_host": None,
+            "contact_way": detail.contact_way,
+            "company": detail.company,
+            "role": detail.title,
+            "message": (
+                f"USE CHROME MCP: visit {detail.redirect_url} and drive the ATS "
+                f"form. {detail.board.name} has no native apply endpoint — "
+                "every posting routes to the company's own application flow."
+            ),
+        }
+
     matched_host = next((h for h in AGGREGATOR_HOSTS if h in redirect.lower()), None)
     # The boards mark paid syndicated listings explicitly (isPartner / cpc).
     # Verified in the browser: those pages carry NO native apply form — the

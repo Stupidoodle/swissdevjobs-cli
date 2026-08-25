@@ -12,8 +12,7 @@ import webbrowser
 
 from swissdevjobs_cli import bootstrap
 from swissdevjobs_cli.adapters import envfile
-from swissdevjobs_cli.adapters.boards.registry import BOARDS
-from swissdevjobs_cli.adapters.boards.worldwide.devitjobs import acl
+from swissdevjobs_cli.adapters.boards import registry
 from swissdevjobs_cli.adapters.http.client import CaptchaRequired, store_clearance
 from swissdevjobs_cli.domain.model.application import Applicant
 from swissdevjobs_cli.domain.model.job import Job, strip_html
@@ -91,7 +90,7 @@ def _print_row(j: Job) -> None:
         date_col = ""
     line = (
         f"{raw['_id']}  "
-        f"{j.board.country:3}  "
+        f"{j.board.source[:14]:14}  "
         f"{date_col:24}  "
         f"{(raw.get('name') or '')[:48]:48}  "
         f"{(raw.get('company') or '')[:25]:25}  "
@@ -126,11 +125,23 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Search, filter, sort, and print the feed."""
     uow = runtime.uow
     boards = (
-        [runtime.boards[c] for c in args.country]
+        [
+            runtime.boards[s]
+            for s in registry.resolve_selectors(args.country)
+            if s in runtime.boards
+        ]
         if args.country
         else runtime.enabled_boards()
     )
-    jobs = with_retry(runtime, search.list_jobs, uow, boards, force=args.refresh)
+    jobs = with_retry(
+        runtime,
+        search.list_jobs,
+        uow,
+        boards,
+        query=args.query,
+        category=args.category,
+        force=args.refresh,
+    )
     filtered = [
         j
         for j in jobs
@@ -145,7 +156,7 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             min_salary=args.min_salary,
             max_salary=args.max_salary,
             language=args.language,
-            query=args.query,
+            query=search.query_for(j, args.query),
             company=args.company,
         )
     ]
@@ -208,7 +219,7 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Print one posting in full."""
     uow = runtime.uow
-    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
+    jobs = with_retry(runtime, search.resolve_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
@@ -234,7 +245,7 @@ def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     )
     print(f"Salary:     {detail.salary.format()}")
     print(f"Tech:       {', '.join(raw.get('technologies') or [])}")
-    print(f"URL:        {acl.posting_url(detail.board, raw.get('jobUrl', ''))}")
+    print(f"URL:        {board.posting_url(raw)}")
     print(
         f"Contact:    {raw.get('candidateContactWay')}  "
         f"{raw.get('emailAddressForApplications') or raw.get('redirectJobUrl') or ''}"
@@ -256,12 +267,14 @@ def cmd_show(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def cmd_open(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Open a posting in the default browser."""
-    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.enabled_boards())
+    jobs = with_retry(
+        runtime, search.resolve_jobs, runtime.uow, runtime.enabled_boards()
+    )
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
         return 1
-    url = acl.posting_url(job.board, job.slug)
+    url = runtime.board_for(job).posting_url(job.raw)
     print(url)
     webbrowser.open(url, new=2)
     return 0
@@ -310,7 +323,7 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     With --complete <method>, marks the job as applied (for email/browser modes).
     """
     uow = runtime.uow
-    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
+    jobs = with_retry(runtime, search.resolve_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
@@ -319,7 +332,7 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     detail = with_retry(runtime, search.get_detail, uow, board, str(job.id))
     raw = detail.raw
 
-    posting_url = acl.posting_url(detail.board, raw.get("jobUrl", ""))
+    posting_url = board.posting_url(raw)
     existing = tracking.existing_application(uow, str(detail.id))
 
     # If --complete flag is set, mark as applied
@@ -368,8 +381,13 @@ def cmd_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 
 def cmd_tech(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
-    """Print the most-tagged technologies across the feed."""
-    jobs = with_retry(runtime, search.list_jobs, runtime.uow, runtime.enabled_boards())
+    """Print the most-tagged technologies across the feed.
+
+    Feed boards only: search-driven boards rarely tag technologies, and
+    counting a query slice would skew the totals anyway.
+    """
+    boards = [b for b in runtime.enabled_boards() if not b.board.search_driven]
+    jobs = with_retry(runtime, search.list_jobs, runtime.uow, boards)
     top = search.top_technologies(jobs, args.limit)
     if args.json:
         print(json.dumps(top, indent=2))
@@ -381,7 +399,8 @@ def cmd_tech(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
 
 def cmd_auth(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     """Proactively open a board so the user can clear a Cloudflare challenge."""
-    board = runtime.boards[args.country].board
+    source = registry.resolve_selectors([args.country])[0]
+    board = runtime.boards[source].board
     ok = interactive_unblock(board.base_url + "/")
     return 0 if ok else 1
 
@@ -535,7 +554,7 @@ def cmd_direct_apply(args: argparse.Namespace, runtime: bootstrap.Runtime) -> in
     if resolved is None:
         return 1
 
-    jobs = with_retry(runtime, search.list_jobs, uow, runtime.enabled_boards())
+    jobs = with_retry(runtime, search.resolve_jobs, uow, runtime.enabled_boards())
     job = search.resolve(jobs, args.id)
     if not job:
         print(f"No job matching {args.id!r}", file=sys.stderr)
@@ -601,11 +620,12 @@ def cmd_config(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
     if args.countries:
         value = args.countries.strip().lower()
         codes = [c.strip() for c in value.split(",")]
-        unknown = [c for c in codes if c != "all" and c not in BOARDS]
+        known = registry.known_selectors()
+        unknown = [c for c in codes if c != "all" and c not in known]
         if unknown:
             print(
-                f"Error: unknown country code(s): {', '.join(unknown)}. "
-                f"Known: {', '.join(sorted(BOARDS))} or 'all'.",
+                f"Error: unknown board selector(s): {', '.join(unknown)}. "
+                f"Known: {', '.join(known)} or 'all'.",
                 file=sys.stderr,
             )
             return 1
@@ -665,7 +685,9 @@ def build_parser() -> argparse.ArgumentParser:
     """The full argparse tree; kept in one place so --help shows everything."""
     p = argparse.ArgumentParser(
         prog="swissdevjobs",
-        description="CLI for swissdevjobs.ch — Swiss dev/IT jobs with salary info.",
+        description="Job search CLI — 8 boards, 7 countries: the devitjobs "
+        "family (all-IT, salary published) plus jobs.ch and jobup.ch "
+        "(all industries).",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -683,9 +705,16 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument(
         "--country",
         action="append",
-        choices=sorted(BOARDS),
-        help="repeatable board selector, e.g. --country ch --country de "
-        "(default: the boards enabled via SDJ_COUNTRIES)",
+        choices=registry.known_selectors(),
+        help="repeatable board selector — a country code selects every board "
+        "there ('ch' = swissdevjobs + jobs.ch + jobup.ch), a source id one "
+        "board ('jobsch'). Default: the boards enabled via SDJ_COUNTRIES",
+    )
+    lp.add_argument(
+        "--category",
+        choices=["it"],
+        help="narrow all-industry boards (jobs.ch, jobup.ch) to one category; "
+        "the devitjobs boards are all-IT already",
     )
     lp.add_argument("--location", help="city substring, e.g. Zurich")
     lp.add_argument("--remote", action="store_true", help="remote or hybrid only")
@@ -770,7 +799,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--country",
         default="ch",
-        choices=sorted(BOARDS),
+        choices=registry.known_selectors(),
         help="which board to open (default: ch)",
     )
     ap.set_defaults(func=cmd_auth)
