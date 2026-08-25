@@ -1,6 +1,6 @@
 """swissdevjobs-cli: job-board client, CLI, and MCP server."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 # Load .env before any adapter resolves paths from the environment. The
 # loader itself has no import-time constants (see adapters/envfile.py), so
