@@ -34,6 +34,7 @@ src/swissdevjobs_cli/
                           country codes OR source ids (two+ boards per country)
       worldwide/devitjobs/   client.py + acl.py for the six-board family
       switzerland/jobcloud/  client.py + acl.py for jobs.ch + jobup.ch
+      singapore/mycareersfuture/  client.py + acl.py for MyCareersFuture
     persistence/          tables, imperative mappers, repositories, SQLite UoW
     envfile.py            .env loader — NO import-time path constants (see below)
     paths.py              eager path constants — import only from adapters
@@ -100,7 +101,7 @@ opposite**:
 
 ## Boards
 
-Two platforms, eight boards; `adapters/boards/registry.py` is the single
+Three platforms, nine boards; `adapters/boards/registry.py` is the single
 source of truth, keyed by `source` (the value in the DB `source` column).
 Board facts surface as data through `list_boards` (MCP) / `sdj boards`
 (CLI) via `dto/board.py` — never hardcode board counts, category lists, or
@@ -126,7 +127,7 @@ categories: shared aliases (`registry.known_contracts()`) that each
 platform maps onto its own taxonomy (devitjobs `jobType` in its ACL,
 JobCloud `employment-type-ids` — platform-wide, verified on both boards);
 `workload` percent exists only on the JobCloud wire (`employment_grades`),
-so the devitjobs boards declare it unavailable. Search-driven boards run
+so the devitjobs and mycareersfuture boards declare it unavailable. Search-driven boards run
 contract/workload server-side via `fetch_jobs` params — post-fetch
 filtering would waste their 2000-row result window.
 Selectors — `--board` (aliases `--source`, `--country`), `SDJ_BOARDS`
@@ -152,6 +153,28 @@ anything by country: `Runtime` routes by `job.board.source`.
   are per board (IT root: jobs.ch 106, jobup 702; jobup 422s on jobs.ch
   ids). Server-matched rows must skip the client-side query filter
   (`search.query_for`) or description-only hits get dropped.
+- **mycareersfuture** (singapore/mycareersfuture/): MyCareersFuture, the
+  Singapore government job portal (Workforce Singapore, API host
+  `api.mycareersfuture.gov.sg`). `Board.search_driven=True`: the
+  Information Technology category alone carries ~9,000 active postings and
+  the wire caps `limit` at 100/page, so the query passes server-side
+  (newest first) scoped to `categories=Information Technology`. Unlike
+  jobcloud it publishes real salary — monthly SGD on the wire, annualized
+  ×12 in the ACL and never guessed for any other unit — and a skills array,
+  so `tech`/`remote` filter normally rather than folding into the query
+  (`remote` maps from `flexibleWorkArrangements`, where `Telecommuting` is
+  the only value meaning location flexibility; the rest are time
+  flexibility). `visa`/`level`/`workload` are unavailable: no
+  sponsorship-eligibility field exists (the employer applies for a specific
+  work pass after the fact), the wire's `positionLevels` vocabulary
+  ("Professional", "Middle Management", "Fresh/entry level", …) has no
+  honest mapping onto the shared Junior→CLevel enum so the raw array is
+  left in `job.raw`, and no workload-percentage field exists at all.
+  `Board.native_apply=False`: apply instructions live in the posting's HTML
+  description (an email address or an external ATS link), so apply refuses
+  with `no_native_apply` + the posting URL. Its `uuid` is a 32-char hex
+  string that is not an ObjectId but decodes as one, so `light_json` is
+  mandatory for its cached rows.
 
 A new family board is a registry entry. A new *platform* is a new folder
 under `adapters/boards/<country>/` (country-locked) or

@@ -1,8 +1,8 @@
 ---
-description: Search eight job boards across seven countries — six salary-transparent tech boards (Switzerland, Germany, UK, US/Canada, Netherlands, France) plus jobs.ch and jobup.ch (all Swiss industries) — and help the user apply. Use when the user asks to find, filter, compare, or apply to jobs in those countries, asks what roles pay, or mentions swissdevjobs.ch, jobs.ch, or their sister boards.
+description: Search nine job boards across eight countries — six salary-transparent tech boards (Switzerland, Germany, UK, US/Canada, Netherlands, France), jobs.ch and jobup.ch (all Swiss industries), and MyCareersFuture (Singapore IT, salary published) — and help the user apply. Use when the user asks to find, filter, compare, or apply to jobs in those countries, including Singapore, asks what roles pay, or mentions swissdevjobs.ch, jobs.ch, mycareersfuture.gov.sg, or their sister boards.
 ---
 
-# Jobs across 8 boards in 7 countries
+# Jobs across 9 boards in 8 countries
 
 The `swissdevjobs` MCP tools search multiple job boards. **Call
 `list_boards` first when board facts matter** — per board it reports scope
@@ -69,8 +69,10 @@ The tool also refuses four cases the platforms cannot deliver natively:
   flags; the majority outside Switzerland, including most talent.com jobs)
 - `aggregator_posting` — the redirect points at a known aggregator network
 - `company_website_posting` — the site only links out to the company's own ATS
-- `no_native_apply` — every jobs.ch/jobup.ch posting: the platform has no
-  native apply endpoint at all
+- `no_native_apply` — every jobs.ch, jobup.ch, and MyCareersFuture posting:
+  the platform has no native apply endpoint at all (on MyCareersFuture the
+  apply instructions sit in the posting's description — an email address or
+  an ATS link)
 
 Each comes back with `apply_url`. Offer to open it and help fill the form in
 the browser, then record it with `mark_applied`.
@@ -80,7 +82,7 @@ the browser, then record it with `mark_applied`.
 Before tailoring a CV or letter for a posting, read the country
 conventions file bundled with this skill: **`cv/<country>.md`**, where
 `<country>` is the job row's `country` value (`ch`, `de`, `uk`, `us`,
-`nl`, `fr`). Load only the country you are applying to. The files cover
+`nl`, `fr`, `sg`). Load only the country you are applying to. The files cover
 format (length, photo, tabular vs one-page), what recruiters filter on
 (permit/work-authorization lines, language levels), and letter register.
 
