@@ -86,7 +86,8 @@ def _contract_types(wire: Mapping[str, Any]) -> list[str]:
     for entry in wire.get("employmentTypes") or []:
         if not isinstance(entry, Mapping):
             continue
-        for alias in EMPLOYMENT_TYPE_CONTRACTS.get(entry.get("employmentType") or "", ()):
+        wire_type = entry.get("employmentType") or ""
+        for alias in EMPLOYMENT_TYPE_CONTRACTS.get(wire_type, ()):
             if alias not in aliases:
                 aliases.append(alias)
     return aliases
