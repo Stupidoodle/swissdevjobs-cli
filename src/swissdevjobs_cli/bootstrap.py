@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from swissdevjobs_cli.adapters import envfile, paths
 from swissdevjobs_cli.adapters.boards import registry
 from swissdevjobs_cli.adapters.boards.registry import BOARDS
+from swissdevjobs_cli.adapters.boards.singapore.mycareersfuture.client import (
+    MyCareersFutureClient,
+)
 from swissdevjobs_cli.adapters.boards.switzerland.jobcloud.client import JobCloudClient
 from swissdevjobs_cli.adapters.boards.worldwide.devitjobs.client import DevITJobsClient
 from swissdevjobs_cli.adapters.http.client import HttpClient
@@ -19,6 +22,7 @@ from swissdevjobs_cli.service_layer import config as config_service
 _PLATFORM_CLIENTS = {
     "devitjobs": DevITJobsClient,
     "jobcloud": JobCloudClient,
+    "mycareersfuture": MyCareersFutureClient,
 }
 
 
