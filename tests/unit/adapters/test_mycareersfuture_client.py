@@ -17,12 +17,18 @@ MCF = BOARDS["mycareersfuture"]
 
 
 class FakeHttp:
-    """Serves one canned /v2/jobs page per call, records every request."""
+    """Serves canned pages for both read paths, recording every request.
 
-    def __init__(self, pages=None, detail=None):
+    ``pages`` feeds the GET browse endpoint, ``search_pages`` the POST
+    search endpoint, so a test can prove which path a call actually took.
+    """
+
+    def __init__(self, pages=None, detail=None, search_pages=None):
         self.pages = pages or {}
+        self.search_pages = search_pages or {}
         self.detail = detail
         self.gets = []
+        self.posts = []
 
     def get(self, url, **kwargs):
         self.gets.append(url)
@@ -32,6 +38,13 @@ class FakeHttp:
         query = urllib.parse.parse_qs(url.split("?", 1)[1])
         page = int(query.get("page", ["0"])[0])
         results = self.pages.get(page, [])
+        return json.dumps({"results": results, "total": len(results)}).encode()
+
+    def post_json(self, url, payload, **kwargs):
+        self.posts.append((url, payload))
+        query = urllib.parse.parse_qs(url.split("?", 1)[1])
+        page = int(query.get("page", ["0"])[0])
+        results = self.search_pages.get(page, [])
         return json.dumps({"results": results, "total": len(results)}).encode()
 
 
@@ -57,16 +70,32 @@ def test_fetch_jobs_scopes_to_it_and_sorts_by_posting_date():
     assert "limit=100" in qs
 
 
-def test_a_query_is_passed_through_as_search():
-    http = FakeHttp(pages={0: []})
-    MyCareersFutureClient(MCF, http).fetch_jobs(query="python engineer")
-    assert "search=python+engineer" in http.gets[0]
+def test_a_query_goes_to_the_post_search_endpoint():
+    """The GET search param 504s on the live API; POST is the working path."""
+    http = FakeHttp(search_pages={0: [doc()]})
+    jobs = MyCareersFutureClient(MCF, http).fetch_jobs(query="python engineer")
+    assert len(jobs) == 1
+    assert not http.gets, "a query must not touch the GET feed"
+    url, body = http.posts[0]
+    assert url.startswith("https://api.mycareersfuture.gov.sg/v2/search?")
+    assert body["search"] == "python engineer"
+    assert body["categories"] == ["Information Technology"]
 
 
-def test_no_query_still_returns_the_newest_postings():
+def test_a_queried_search_is_paginated_and_sorted_like_the_feed():
+    http = FakeHttp(search_pages={0: []})
+    MyCareersFutureClient(MCF, http).fetch_jobs(query="rust")
+    url, _ = http.posts[0]
+    assert "limit=100" in url
+    assert "page=0" in url
+    assert "sortBy=new_posting_date" in url
+
+
+def test_no_query_uses_the_get_feed_instead():
     http = FakeHttp(pages={0: [doc()]})
     jobs = MyCareersFutureClient(MCF, http).fetch_jobs()
     assert len(jobs) == 1
+    assert not http.posts, "an unqueried browse must not POST"
     assert "search=" not in http.gets[0]
 
 
