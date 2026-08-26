@@ -51,6 +51,36 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
+        if self.path.startswith("/echo"):
+            # Hand back what actually arrived so the test can assert on it.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "sent": json.loads(body.decode()),
+                        "content_type": self.headers.get("Content-Type"),
+                    }
+                ).encode()
+            )
+            return
+        if self.path.startswith("/post-gzip"):
+            self.send_response(200)
+            self.send_header("Content-Encoding", "gzip")
+            self.end_headers()
+            self.wfile.write(gzip.compress(b'{"zipped": true}'))
+            return
+        if self.path.startswith("/post-challenge"):
+            self.send_response(403)
+            self.end_headers()
+            self.wfile.write(b"<html>Just a moment...</html>")
+            return
+        if self.path.startswith("/post-boom"):
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(b"boom")
+            return
         self.send_response(200)
         self.end_headers()
         # Echo back what field names arrived, so the test can assert them.
@@ -104,6 +134,34 @@ def test_post_multipart_round_trips(client):
     )
     assert result["status"] == 200
     assert json.loads(result["response"])["got"] > 0
+
+
+def test_post_json_sends_a_json_body_and_returns_the_response(client):
+    raw = client.post_json("/echo", {"search": "python", "categories": ["IT"]})
+    echoed = json.loads(raw)
+    assert echoed["sent"] == {"search": "python", "categories": ["IT"]}
+    assert echoed["content_type"] == "application/json"
+
+
+def test_post_json_decompresses_gzip(client):
+    assert json.loads(client.post_json("/post-gzip", {})) == {"zipped": True}
+
+
+def test_post_json_detects_a_cloudflare_challenge(client):
+    with pytest.raises(CaptchaRequired):
+        client.post_json("/post-challenge", {})
+
+
+def test_post_json_raises_on_a_server_error(client):
+    with pytest.raises(RuntimeError):
+        client.post_json("/post-boom", {})
+
+
+def test_post_json_accepts_an_absolute_url(server, tmp_path):
+    """Boards whose API lives on a different host than their base_url."""
+    client = HttpClient("https://example.invalid", tmp_path / "cookies.txt")
+    raw = client.post_json(f"{server}/echo", {"ok": 1})
+    assert json.loads(raw)["sent"] == {"ok": 1}
 
 
 def test_build_multipart_carries_fields_and_files():

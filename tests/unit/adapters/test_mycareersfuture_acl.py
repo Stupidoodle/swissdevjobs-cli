@@ -110,6 +110,37 @@ def test_a_list_row_normalizes_to_the_shared_raw_keys():
     assert raw["minimumYearsExperience"] == 8
 
 
+def test_an_agency_posting_names_the_hiring_company_not_the_agency():
+    """The board's own URL slug is built from hiringCompany, so it wins."""
+    j = acl.job_from_wire(
+        doc(
+            postedCompany={"name": "JL EMPLOYMENT & RECRUITMENT AGENCY"},
+            hiringCompany={"name": "V-TECH AUTO SERVICE"},
+            metadata={**doc()["metadata"], "isPostedOnBehalf": True},
+        ),
+        MCF,
+    )
+    assert j.company == "V-TECH AUTO SERVICE"
+
+
+def test_a_hidden_hiring_employer_falls_back_to_the_poster():
+    """The employer asked not to be named; honour that rather than leak it."""
+    j = acl.job_from_wire(
+        doc(
+            postedCompany={"name": "SC HR SOLUTIONS PTE. LTD."},
+            hiringCompany={"name": "REAP TECHNOLOGIES (SG) PTE. LTD."},
+            metadata={**doc()["metadata"], "isHideHiringEmployerName": True},
+        ),
+        MCF,
+    )
+    assert j.company == "SC HR SOLUTIONS PTE. LTD."
+
+
+def test_an_absent_hiring_company_uses_the_poster():
+    j = acl.job_from_wire(doc(hiringCompany=None), MCF)
+    assert j.company == "GENESYS CLOUD SERVICES SINGAPORE PTE. LTD."
+
+
 def test_monthly_salary_is_annualized_from_the_nested_type_object():
     """`salary.type` is an object on the wire, not a bare string."""
     j = acl.job_from_wire(doc(), MCF)
@@ -177,8 +208,13 @@ def test_empty_skills_yield_an_empty_list_not_a_crash():
     assert j.raw["filterTags"] == []
 
 
-def test_telecommuting_is_the_remote_signal():
-    """Singapore's wire taxonomy has no "Flexi-Place" — remote is Telecommuting."""
+def test_telecommuting_is_the_location_flexibility_signal():
+    """No "Flexi-Place" in this taxonomy; Telecommuting is the one to read.
+
+    Mapped to "hybrid", not "remote": the wire lists what an employer
+    offers, which is weaker than a remote-first claim, and "hybrid" keeps
+    the posting for `--remote` without lying to `--remote false`.
+    """
     j = acl.job_from_wire(
         doc(
             flexibleWorkArrangements=[
@@ -187,7 +223,7 @@ def test_telecommuting_is_the_remote_signal():
         ),
         MCF,
     )
-    assert j.raw["workplace"] == "remote"
+    assert j.raw["workplace"] == "hybrid"
 
 
 def test_other_flexible_arrangements_are_not_remote():
@@ -210,7 +246,7 @@ def test_other_flexible_arrangements_are_not_remote():
         assert j.raw["workplace"] == "onsite", arrangement
 
 
-def test_telecommuting_alongside_other_arrangements_still_reads_remote():
+def test_telecommuting_alongside_other_arrangements_still_counts():
     j = acl.job_from_wire(
         doc(
             flexibleWorkArrangements=[
@@ -220,7 +256,7 @@ def test_telecommuting_alongside_other_arrangements_still_reads_remote():
         ),
         MCF,
     )
-    assert j.raw["workplace"] == "remote"
+    assert j.raw["workplace"] == "hybrid"
 
 
 def test_no_flexible_arrangements_is_onsite():
@@ -297,23 +333,54 @@ def test_posted_at_unix_is_decoded_from_the_original_posting_date():
     assert j.raw["postedAtUnix"] == 1787184000
 
 
-def test_a_missing_posting_date_yields_none_not_a_crash():
+def test_a_search_row_falls_back_to_the_bumpable_date_and_says_so():
+    """POST search rows carry only `newPostingDate`, never the original."""
     j = acl.job_from_wire(
         doc(metadata={**doc()["metadata"], "originalPostingDate": None}), MCF
     )
+    assert j.raw["postedAt"] == "2026-08-26"
+    assert j.posted_at_unix == 1787702400
+    assert j.raw["postedAtIsBumpable"] is True
+
+
+def test_a_feed_row_prefers_the_immutable_date_and_says_so():
+    j = acl.job_from_wire(doc(), MCF)
+    assert j.raw["postedAt"] == "2026-08-20"
+    assert j.raw["postedAtIsBumpable"] is False
+
+
+def test_no_dates_at_all_yields_none_not_a_crash():
+    j = acl.job_from_wire(
+        doc(
+            metadata={
+                **doc()["metadata"],
+                "originalPostingDate": None,
+                "newPostingDate": None,
+            }
+        ),
+        MCF,
+    )
     assert j.posted_at_unix is None
     assert j.raw["postedAt"] is None
+    assert j.raw["postedAtIsBumpable"] is False
 
 
-def test_detail_from_wire_strips_description_html():
+def test_detail_keeps_the_wire_html_for_the_dtos_to_strip():
+    """Flattening here would destroy any link before the row is persisted."""
     d = acl.detail_from_wire(doc(), MCF)
-    assert "Customer Success" in d.raw["description"]
-    assert "<p>" not in d.raw["description"]
-    assert d.contact_way is None
-    assert d.redirect_url is None
+    assert d.raw["description"] == doc()["description"]
+    assert "<b>" in d.raw["description"]
     assert d.apply_email is None
     assert d.questions == ()
     assert d.board is MCF
+
+
+def test_detail_hands_back_the_posting_page_as_the_apply_channel():
+    """A refusal with a null apply_url would black-hole the application."""
+    d = acl.detail_from_wire(doc(), MCF)
+    assert d.redirect_url == doc()["metadata"]["jobDetailsUrl"]
+    assert d.raw["redirectJobUrl"] == d.redirect_url
+    assert d.contact_way == "portal"
 
 
 def test_posting_url_uses_the_metadata_link():

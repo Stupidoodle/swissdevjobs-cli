@@ -136,7 +136,7 @@ to IT and publishing salary:
 | 🇫🇷 | [devitjobs.fr](https://devitjobs.fr) | France | IT | EUR | always | ✅ |
 | 🇨🇭 | [jobs.ch](https://www.jobs.ch) | Switzerland | **all industries** | CHF | none | 🌐 via ATS |
 | 🇨🇭 | [jobup.ch](https://www.jobup.ch) | Switzerland (Romandie) | **all industries** | CHF | none | 🌐 via ATS |
-| 🇸🇬 | [MyCareersFuture](https://www.mycareersfuture.gov.sg) | Singapore | IT | SGD | always | 🌐 via ATS/email |
+| 🇸🇬 | [MyCareersFuture](https://www.mycareersfuture.gov.sg) | Singapore | IT | SGD | always | 🌐 on the posting page |
 
 All boards are searched by default. A selector is a board id (just that one)
 or a country code (every board there) — `--board`, with `--source` and
@@ -199,9 +199,9 @@ employer applies for a specific work pass after the fact, so there is no
 ("Professional", "Middle Management", "Fresh/entry level", …) have no honest
 mapping onto the tool's Junior/Regular/Senior/Principal/CLevel enum, so they
 stay in `job.raw` rather than being guessed at; and no workload-percentage
-field exists at all. There is **no native apply** either — the application
-instructions live in the posting's HTML description, an email address or an
-external ATS link, so `direct-apply` refuses with the real posting URL.
+field exists at all. There is **no native apply** either — applying happens
+on the posting page, through the portal's own flow, so `direct-apply`
+refuses and hands back that page's URL.
 
 Native postings on every devitjobs board publish a salary range. Syndicated listings
 (marked `isPartner` by the boards — the majority outside Switzerland) sometimes

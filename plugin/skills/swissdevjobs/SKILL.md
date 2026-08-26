@@ -71,8 +71,8 @@ The tool also refuses four cases the platforms cannot deliver natively:
 - `company_website_posting` — the site only links out to the company's own ATS
 - `no_native_apply` — every jobs.ch, jobup.ch, and MyCareersFuture posting:
   the platform has no native apply endpoint at all (on MyCareersFuture the
-  apply instructions sit in the posting's description — an email address or
-  an ATS link)
+  application is made on the posting page itself, through the portal's own
+  flow, so the URL you get back is the one to open)
 
 Each comes back with `apply_url`. Offer to open it and help fill the form in
 the browser, then record it with `mark_applied`.

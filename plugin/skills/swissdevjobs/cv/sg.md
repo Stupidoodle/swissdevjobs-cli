@@ -39,9 +39,14 @@ categories a posting cares about:
   number you read anywhere, including here.
 - **S Pass** — mid-skilled roles, additionally constrained by a company
   quota and a levy, which makes some employers unwilling regardless of fit.
-- **Dependant's Pass / Long-Term Visit Pass holders** may need a Letter of
-  Consent to work. If this is you, say it — it is much cheaper for an
-  employer than a fresh EP and is a genuine advantage worth stating.
+- **Long-Term Visit Pass / LTVP+ holders** may work on a Letter of Consent.
+  If this is you, say it — an LOC is far lighter for an employer than
+  sponsoring a fresh pass, and it is a genuine advantage worth stating.
+- **Dependant's Pass holders cannot.** The Letter of Consent route was
+  withdrawn for DP holders on 1 May 2021; a DP holder who wants to work now
+  needs their own Employment Pass, S Pass, or Work Permit, sponsored by the
+  employer like any other candidate. Older advice online still says
+  otherwise — it is out of date, and acting on it wastes an application.
 
 **State your status in one line near the top.** "Singapore Citizen",
 "Singapore PR", "Employment Pass holder (transferable)", or "Requires

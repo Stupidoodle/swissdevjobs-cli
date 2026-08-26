@@ -170,11 +170,16 @@ anything by country: `Runtime` routes by `job.board.source`.
   ("Professional", "Middle Management", "Fresh/entry level", …) has no
   honest mapping onto the shared Junior→CLevel enum so the raw array is
   left in `job.raw`, and no workload-percentage field exists at all.
-  `Board.native_apply=False`: apply instructions live in the posting's HTML
-  description (an email address or an external ATS link), so apply refuses
-  with `no_native_apply` + the posting URL. Its `uuid` is a 32-char hex
-  string that is not an ObjectId but decodes as one, so `light_json` is
-  mandatory for its cached rows.
+  `Board.native_apply=False`: applying happens on the posting page through
+  the portal's own flow (the detail payload carries `screeningQuestions`),
+  not by redirect to an external ATS — 0 of 300 sampled descriptions
+  carried a link of any kind — so apply refuses with `no_native_apply` and
+  hands back `jobDetailsUrl`, which really is where an application is made.
+  Its `uuid` is a 32-char hex string that is not an ObjectId but decodes as
+  one, so `light_json` is mandatory for its cached rows. Queries go to
+  `POST /v2/search`, never `GET /v2/jobs?search=`: the GET search param
+  504s on anything not already CDN-warm, which took every other board down
+  with it (v0.9.1).
 
 A new family board is a registry entry. A new *platform* is a new folder
 under `adapters/boards/<country>/` (country-locked) or

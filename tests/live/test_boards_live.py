@@ -54,10 +54,30 @@ def test_a_jobcloud_query_actually_narrows():
     assert all(j.board is board for j in jobs)
 
 
-def test_a_mycareersfuture_query_actually_narrows():
+@pytest.mark.parametrize(
+    "query", ["python", "kubernetes sre", "golang backend", "rust systems"]
+)
+def test_a_mycareersfuture_query_is_answered_at_all(query):
+    """Several queries, deliberately, and answering is the whole assertion.
+
+    The earlier single-query version of this test passed against a search
+    endpoint that 504s on anything not already CDN-warm — "python" happened
+    to be warm, so a fully broken search path looked healthy. The niche
+    queries here are the point: they are the ones that were never warm.
+
+    Zero hits is a valid answer (this is one country's IT category), so
+    only the call completing is asserted. Coverage is the next test's job.
+    """
     board = BOARDS["mycareersfuture"]
-    jobs = _client(board).fetch_jobs(query="python")
-    assert jobs, "MyCareersFuture returned nothing for a python query"
+    jobs = _client(board).fetch_jobs(query=query)
+    assert isinstance(jobs, list)
+    assert all(j.board is board for j in jobs)
+
+
+def test_a_broad_mycareersfuture_query_actually_returns_rows():
+    board = BOARDS["mycareersfuture"]
+    jobs = _client(board).fetch_jobs(query="engineer")
+    assert jobs, "MyCareersFuture returned nothing for 'engineer'"
     assert all(j.board is board for j in jobs)
 
 
@@ -76,4 +96,23 @@ def test_mycareersfuture_publishes_the_data_it_claims_to():
     assert len(priced) > len(jobs) // 2, "salary.type nesting likely changed"
     assert len(tagged) > len(jobs) // 2, "skills[].skill key likely changed"
     assert len(located) > len(jobs) // 2, "address.districts shape likely changed"
-    assert all(j.raw["workplace"] in ("remote", "onsite") for j in jobs)
+    assert all(j.raw["workplace"] in ("hybrid", "onsite") for j in jobs)
+    assert all(j.posted_at_unix for j in jobs), "feed rows carry a posting date"
+
+
+def test_a_mycareersfuture_search_row_survives_the_thinner_post_payload():
+    """POST search rows omit description and the immutable posting date.
+
+    Everything else the ACL reads must still be there, or the search path
+    silently degrades into rows with no salary, no tags, and no location.
+    """
+    board = BOARDS["mycareersfuture"]
+    jobs = _client(board).fetch_jobs(query="engineer")
+    assert jobs, "MyCareersFuture returned nothing for 'engineer'"
+    priced = [j for j in jobs if j.salary.lower]
+    tagged = [j for j in jobs if j.raw["technologies"]]
+    assert len(priced) > len(jobs) // 2, "salary missing from search rows"
+    assert len(tagged) > len(jobs) // 2, "skills missing from search rows"
+    # The date falls back to the bumpable one and must say so, not go silent.
+    assert all(j.posted_at_unix for j in jobs)
+    assert all(j.raw["postedAtIsBumpable"] for j in jobs)
