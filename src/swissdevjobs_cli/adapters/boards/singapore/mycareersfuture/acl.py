@@ -21,8 +21,12 @@ that bite, because a plausible guess is wrong in every case:
   `flexibleWorkArrangement`. The observed vocabulary is Telecommuting,
   Flexi-Hours, Staggered Time, Compressed Work Schedule, Creative
   Scheduling, and Employees Choice of Days Off — there is no "Flexi-Place".
-  Only Telecommuting is location flexibility, so only it means remote; the
-  rest are time flexibility and must not be mistaken for it.
+  Only Telecommuting is location flexibility; the rest flex *when*, not
+  *where*, and must not be mistaken for it. Telecommuting maps to
+  "hybrid" rather than "remote": the field lists arrangements an employer
+  *offers*, which is not a claim that the role is remote-first. "hybrid"
+  is right in both directions — `--remote` matches it, and `--remote false`
+  no longer discards every posting that merely offers telecommuting.
 - `address` has no singular `district` key (0 of 300 rows). Location lives
   in `address.districts[]`, always exactly one entry, carrying a verbose
   `location` ("D01 Marina, Raffles Place, People's Park, Cecil") and a
@@ -31,16 +35,31 @@ that bite, because a plausible guess is wrong in every case:
   so `--location` substring matching works against either.
 - `uuid` is a 32-char hex string with no dashes. It is NOT a MongoDB
   ObjectId, but it would happily hex-decode as one into a 1972 timestamp,
-  so `postedAtUnix` is parsed from `metadata.originalPostingDate` instead
-  and cached rows MUST round-trip through `light_json`.
+  so `postedAtUnix` is parsed from a wire date instead and cached rows MUST
+  round-trip through `light_json`. `metadata.originalPostingDate` — the
+  immutable first-published date — is preferred, but it exists only on the
+  GET feed; POST search rows carry `newPostingDate` alone, which the board
+  re-stamps when it bumps a listing. That fallback is used and flagged in
+  `postedAtIsBumpable`, so nothing downstream mistakes a bumped date for a
+  first-published one.
 - `positionLevels` ("Professional", "Executive", "Manager", "Middle
   Management", "Fresh/entry level", …) has no honest mapping onto the
   shared Junior/Regular/Senior/Principal/CLevel enum, so `level` filtering
   is declared unavailable on the Board rather than guessed at here. The
   original array survives in `raw` for anything that wants it.
-- there is no application-submission endpoint: apply instructions live in
-  the HTML `description` (email or external ATS link), never a structured
-  field the tool could POST to.
+- there is no application-submission endpoint. Applying happens **on the
+  posting page**, through MyCareersFuture's own flow (the detail payload
+  carries `screeningQuestions` and a `_links.screeningQuestions`), not by
+  redirect to an external ATS: across 300 sampled descriptions, zero
+  contained a link of any kind and none a `mailto:`. Some do name a contact
+  address in their prose. So `redirectJobUrl` is the posting URL itself —
+  that page really is where an application is made, and a refusal that
+  hands back the right URL is the whole point of the deliverability gate.
+- `postedCompany` is not always the employer. When `metadata.isPostedOnBehalf`
+  is set, the posting is an agency's and `hiringCompany` names the real
+  employer — MyCareersFuture agrees, building its own canonical URL slug
+  from the hiring company. So `hiringCompany` wins when present and not
+  hidden by `metadata.isHideHiringEmployerName`.
 """
 
 from __future__ import annotations
@@ -51,7 +70,7 @@ from typing import Any
 
 from swissdevjobs_cli.domain.model.board import Board
 from swissdevjobs_cli.domain.model.ids import JobId
-from swissdevjobs_cli.domain.model.job import Job, JobDetail, strip_html
+from swissdevjobs_cli.domain.model.job import Job, JobDetail
 from swissdevjobs_cli.domain.model.salary import SalaryRange
 
 # Wire `employmentType` -> shared contract aliases. Values verified live;
@@ -127,7 +146,11 @@ def _skill_names(wire: Mapping[str, Any]) -> list[str]:
 
 
 def _workplace(wire: Mapping[str, Any]) -> str:
-    """Remote only for Telecommuting; the rest flex *when*, not *where*."""
+    """Hybrid for Telecommuting; the rest flex *when*, not *where*.
+
+    Deliberately not "remote": the wire lists arrangements the employer
+    offers, which is weaker than a claim that the role is remote-first.
+    """
     for entry in wire.get("flexibleWorkArrangements") or []:
         label = (
             entry.get("flexibleWorkArrangement")
@@ -135,8 +158,20 @@ def _workplace(wire: Mapping[str, Any]) -> str:
             else entry
         )
         if str(label or "").strip().lower() == _TELECOMMUTING:
-            return "remote"
+            return "hybrid"
     return "onsite"
+
+
+def _company(wire: Mapping[str, Any]) -> str:
+    """The employer, preferring the hiring company over the posting agency."""
+    metadata = wire.get("metadata") or {}
+    if not metadata.get("isHideHiringEmployerName"):
+        hiring = wire.get("hiringCompany") or {}
+        name = hiring.get("name") if isinstance(hiring, Mapping) else None
+        if name:
+            return str(name)
+    posted = wire.get("postedCompany") or {}
+    return str(posted.get("name") or "") if isinstance(posted, Mapping) else ""
 
 
 def _district(wire: Mapping[str, Any]) -> tuple[str | None, str | None]:
@@ -165,7 +200,6 @@ def _normalize(wire: Mapping[str, Any], board: Board) -> dict[str, Any]:
     """Original wire keys + the normalized keys the system reads."""
     raw = dict(wire)
     metadata = wire.get("metadata") or {}
-    company = wire.get("postedCompany") or {}
     uuid = wire.get("uuid") or ""
     location, region = _district(wire)
     salary = _salary_range(wire, board.currency)
@@ -173,7 +207,7 @@ def _normalize(wire: Mapping[str, Any], board: Board) -> dict[str, Any]:
     raw["_id"] = uuid
     raw["jobUrl"] = metadata.get("jobDetailsUrl") or f"{board.base_url}/job/{uuid}"
     raw["name"] = wire.get("title") or ""
-    raw["company"] = company.get("name") or ""
+    raw["company"] = _company(wire)
     raw["actualCity"] = location
     raw["cityCategory"] = region
     # No language field exists on the wire, but the platform is English-only
@@ -182,8 +216,14 @@ def _normalize(wire: Mapping[str, Any], board: Board) -> dict[str, Any]:
     # every row — the silent-empty lie the parity contract forbids.
     raw["language"] = "en"
     raw["activeFrom"] = metadata.get("newPostingDate")
-    raw["postedAt"] = metadata.get("originalPostingDate")
-    raw["postedAtUnix"] = _epoch(metadata.get("originalPostingDate"))
+    # The immutable first-published date when the wire offers it; POST
+    # search rows carry only the re-stampable one, so fall back to that
+    # rather than leaving every searched row undated — and say which it is.
+    original = metadata.get("originalPostingDate")
+    bumped = metadata.get("newPostingDate")
+    raw["postedAt"] = original or bumped
+    raw["postedAtUnix"] = _epoch(raw["postedAt"])
+    raw["postedAtIsBumpable"] = not original and bool(bumped)
     tech = _skill_names(wire)
     raw["technologies"] = tech
     raw["filterTags"] = tech
@@ -226,11 +266,17 @@ def jobs_from_wire(rows: list[Mapping[str, Any]], board: Board) -> list[Job]:
 
 
 def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
-    """A job row -> domain JobDetail (list rows already carry the description)."""
+    """A job row -> domain JobDetail.
+
+    The description is left as the wire's own HTML, like the JobCloud ACL
+    does: the DTOs strip it at render time anyway, and flattening it here
+    would destroy any link it contains before the row is ever persisted.
+    """
     raw = _normalize(wire, board)
-    raw["description"] = strip_html(str(wire.get("description") or ""))
-    raw["candidateContactWay"] = None
-    raw["redirectJobUrl"] = None
+    raw["candidateContactWay"] = "portal"
+    # The posting page IS the application channel here, so the refusal has a
+    # real URL to hand back instead of null.
+    raw["redirectJobUrl"] = raw["jobUrl"]
     return JobDetail(
         id=JobId(raw["_id"]),
         slug=raw["jobUrl"],
@@ -239,9 +285,9 @@ def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
         city=raw.get("actualCity") or raw.get("cityCategory"),
         salary=_salary_of(raw, board),
         language=raw["language"],
-        contact_way=None,
+        contact_way=raw["candidateContactWay"],
         apply_email=None,
-        redirect_url=None,
+        redirect_url=raw["redirectJobUrl"],
         questions=(),
         has_lang_check=False,
         board=board,
