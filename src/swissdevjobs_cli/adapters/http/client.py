@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import gzip
+import json
 import time
 import urllib.error
 import urllib.request
@@ -201,6 +202,62 @@ class HttpClient:
                 f"{raw[:300].decode('utf-8', errors='replace')!r}"
             )
         return {"status": status, "response": raw.decode("utf-8", errors="replace")}
+
+    def post_json(
+        self, path: str, payload: dict[str, Any], *, timeout: int = 30
+    ) -> bytes:
+        """POST a JSON body and return the raw response bytes.
+
+        The read counterpart of ``get`` for boards whose search lives behind
+        a POST: same cookie jar, same gzip handling, same Cloudflare
+        challenge detection. Reads only — ``post_multipart`` remains the
+        only way an application is ever submitted.
+        """
+        url = path if path.startswith("http") else f"{self.base_url}{path}"
+        body = json.dumps(payload).encode("utf-8")
+        jar = self._jar()
+        opener = self._opener(jar)
+        # S310: https-only, host comes from the board registry.
+        req = urllib.request.Request(  # noqa: S310
+            url,
+            data=body,
+            headers={
+                "User-Agent": self.user_agent,
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate",
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url,
+            },
+            method="POST",
+        )
+        try:
+            resp = opener.open(req, timeout=timeout)  # noqa: S310 — scheme is fixed https, host comes from the board registry
+            status = resp.status
+            headers = {k.lower(): v for k, v in resp.headers.items()}
+            raw = resp.read()
+        except urllib.error.HTTPError as e:
+            status = e.code
+            headers = {
+                k.lower(): v for k, v in (e.headers.items() if e.headers else [])
+            }
+            raw = e.read() or b""
+            e.close()
+
+        if headers.get("content-encoding") == "gzip":
+            with contextlib.suppress(Exception):
+                raw = gzip.decompress(raw)
+
+        jar.save(ignore_discard=True, ignore_expires=True)
+
+        if _looks_like_challenge(status, raw, headers):
+            raise CaptchaRequired(
+                url, status, raw[:500].decode("utf-8", errors="replace")
+            )
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status} for {url}: {raw[:200]!r}")
+        return raw
 
 
 def store_clearance(cookie_file: Path, value: str, domain: str) -> None:
