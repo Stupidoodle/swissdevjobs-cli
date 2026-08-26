@@ -176,7 +176,11 @@ def _normalize(wire: Mapping[str, Any], board: Board) -> dict[str, Any]:
     raw["company"] = company.get("name") or ""
     raw["actualCity"] = location
     raw["cityCategory"] = region
-    raw["language"] = None
+    # No language field exists on the wire, but the platform is English-only
+    # by policy (postings render as "English (original)" with machine
+    # translations). None here would make `--language en` silently drop
+    # every row — the silent-empty lie the parity contract forbids.
+    raw["language"] = "en"
     raw["activeFrom"] = metadata.get("newPostingDate")
     raw["postedAt"] = metadata.get("originalPostingDate")
     raw["postedAtUnix"] = _epoch(metadata.get("originalPostingDate"))
@@ -234,7 +238,7 @@ def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:
         company=raw["company"],
         city=raw.get("actualCity") or raw.get("cityCategory"),
         salary=_salary_of(raw, board),
-        language=None,
+        language=raw["language"],
         contact_way=None,
         apply_email=None,
         redirect_url=None,

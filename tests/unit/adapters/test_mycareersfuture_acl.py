@@ -100,7 +100,8 @@ def test_a_list_row_normalizes_to_the_shared_raw_keys():
     assert raw["jobUrl"] == doc()["metadata"]["jobDetailsUrl"]
     assert raw["name"] == "Senior Manager, Digital Lead"
     assert raw["company"] == "GENESYS CLOUD SERVICES SINGAPORE PTE. LTD."
-    assert raw["language"] is None
+    # English by platform policy — None would make --language en drop the row.
+    assert raw["language"] == "en"
     assert raw["country"] == "sg"
     assert raw["source"] == "mycareersfuture"
     # original wire keys survive for agents that want them
