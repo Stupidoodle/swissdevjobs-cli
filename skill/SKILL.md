@@ -25,9 +25,9 @@ URL; follow browser mode.
 per page. It does publish salary (annualized from the monthly SGD figure)
 and skills, so `--min-salary`, `--tech`, and `--remote` work there;
 `--visa`, `--level`, and `--workload` don't exist on its wire and exclude it
-visibly. It has **no native apply** either — the apply instructions are an
-email address or an ATS link inside the posting, so `direct-apply` refuses
-with the posting URL and you continue in browser or email mode.
+visibly. It has **no native apply** either — applying happens on the posting
+page through the portal's own flow, so `direct-apply` refuses with that
+page's URL and you continue in browser mode.
 
 **Prefer the MCP server when it is connected.** `swissdevjobs-cli` also ships
 an MCP server exposing `search_jobs`, `list_boards`, `get_job`,
