@@ -1,14 +1,16 @@
 ---
 name: swissdevjobs
-description: Search eight job boards across seven countries — the salary-transparent devitjobs family plus jobs.ch and jobup.ch (all Swiss industries) — and help the user apply. Handles the native apply form, direct-email postings, and third-party ATS postings (driven with a browser MCP). Trigger when the user asks to find, filter, review, or apply to jobs in those countries, or mentions swissdevjobs.ch or jobs.ch.
+description: Search nine job boards across eight countries — the salary-transparent devitjobs family, jobs.ch and jobup.ch (all Swiss industries), and MyCareersFuture (Singapore IT) — and help the user apply. Handles the native apply form, direct-email postings, and third-party ATS postings (driven with a browser MCP). Trigger when the user asks to find, filter, review, or apply to jobs in those countries, including Singapore, or mentions swissdevjobs.ch, jobs.ch, or mycareersfuture.gov.sg.
 ---
 
 # swissdevjobs skill
 
-Drives the `swissdevjobs-cli` tool to search, inspect, and apply across two
-platforms: the all-IT devitjobs family (swissdevjobs.ch, germantechjobs.de,
-devitjobs.uk/.com/.nl/.fr — salary always published) and JobCloud (jobs.ch,
-jobup.ch — every Swiss industry, ~50k postings, no salary data).
+Drives the `swissdevjobs-cli` tool to search, inspect, and apply across
+three platforms: the all-IT devitjobs family (swissdevjobs.ch,
+germantechjobs.de, devitjobs.uk/.com/.nl/.fr — salary always published),
+JobCloud (jobs.ch, jobup.ch — every Swiss industry, ~50k postings, no salary
+data), and MyCareersFuture (Singapore's government job portal — IT only,
+~9k postings, salary published in SGD).
 
 **jobs.ch/jobup.ch are search-driven**: without a query they only return
 their newest postings, so always pass the user's actual search terms
@@ -17,6 +19,15 @@ tech. Board selectors take a board id (`--board jobsch`) or a country code
 (`--board ch` = all three Swiss boards). Their postings have **no
 native apply** — `direct-apply` answers `no_native_apply` with the real ATS
 URL; follow browser mode.
+
+**MyCareersFuture is search-driven too** (`--board sg` or
+`--board mycareersfuture`), for the same reason: ~9k IT postings, 100 rows
+per page. It does publish salary (annualized from the monthly SGD figure)
+and skills, so `--min-salary`, `--tech`, and `--remote` work there;
+`--visa`, `--level`, and `--workload` don't exist on its wire and exclude it
+visibly. It has **no native apply** either — the apply instructions are an
+email address or an ATS link inside the posting, so `direct-apply` refuses
+with the posting URL and you continue in browser or email mode.
 
 **Prefer the MCP server when it is connected.** `swissdevjobs-cli` also ships
 an MCP server exposing `search_jobs`, `list_boards`, `get_job`,
@@ -64,7 +75,8 @@ envelope (with `boards_searched` and a coverage `note`), capped at 50 unless
 you pass `--limit` (`0` = uncapped). `--raw` restores the full wire rows
 (~470 tokens each — always cap those with `--limit`). Filters a board's
 platform cannot serve (salary, remote, visa, level on jobs.ch/jobup.ch;
-`--workload` on the devitjobs boards) exclude that board **visibly**: the
+visa, level, workload on MyCareersFuture; `--workload` on the devitjobs
+boards) exclude that board **visibly**: the
 envelope carries `boards_excluded` and the note explains it — drop the
 filter to search those boards. `--tech` still reaches jobs.ch/jobup.ch
 (the terms travel server-side as the full-text query), and `--contract`
@@ -118,8 +130,8 @@ motivation letter must not contain `<` or `>` — the site rejects them.
 
 `direct-apply` refuses with exit code 2 when the posting is syndicated from an
 aggregator, when it merely links out to the company's own ATS, or always on
-jobs.ch/jobup.ch (`no_native_apply` — the platform has no native apply
-endpoint). In every case the command routes you to the ATS URL instead.
+jobs.ch/jobup.ch and MyCareersFuture (`no_native_apply` — the platform has
+no native apply endpoint). In every case the command routes you to the ATS URL instead.
 Follow the browser mode.
 
 ### mode == "email"
@@ -166,7 +178,7 @@ calls resume.
 ## Tailoring the CV
 
 Per-country CV conventions live in **`cv/<country>.md`** next to this file
-(`ch`, `de`, `uk`, `us`, `nl`, `fr` — pick the posting's `country` value
+(`ch`, `de`, `uk`, `us`, `nl`, `fr`, `sg` — pick the posting's `country` value
 from the job row, load only that one). They cover format culture, the
 permit/work-authorization lines recruiters filter on, language rules, and
 letter register. Emit LaTeX/typst/HTML source the user can render — never

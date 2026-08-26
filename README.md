@@ -2,14 +2,14 @@
 
 # 🇨🇭 swissdevjobs-cli
 
-**Search, filter, and apply across 8 job boards in 7 countries — ~4,700 tech jobs with salary data, plus all ~50,000 Swiss postings on jobs.ch & jobup.ch — without leaving your terminal.**
+**Search, filter, and apply across 9 job boards in 8 countries — ~4,700 tech jobs with salary data, plus all ~50,000 Swiss postings on jobs.ch & jobup.ch and ~9,000 Singapore IT postings on MyCareersFuture — without leaving your terminal.**
 
-🇨🇭 Switzerland · 🇩🇪 Germany · 🇬🇧 UK · 🇺🇸🇨🇦 US & Canada · 🇳🇱 Netherlands · 🇫🇷 France
+🇨🇭 Switzerland · 🇩🇪 Germany · 🇬🇧 UK · 🇺🇸🇨🇦 US & Canada · 🇳🇱 Netherlands · 🇫🇷 France · 🇸🇬 Singapore
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](pyproject.toml)
-[![Boards](https://img.shields.io/badge/boards-8_boards_·_7_countries-orange.svg)](#boards)
+[![Boards](https://img.shields.io/badge/boards-9_boards_·_8_countries-orange.svg)](#boards)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2.svg)](#install)
 [![MCP](https://img.shields.io/badge/MCP-server%20included-6E56CF.svg)](#mcp-server)
 [![CI](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Stupidoodle/swissdevjobs-cli/actions/workflows/ci.yml)
@@ -23,8 +23,10 @@ boards covering Germany, the UK, the US & Canada, the Netherlands, and France �
 required to publish a salary range. That makes them the rare job boards where you can
 filter by pay before you click. Since v0.5 the tool also searches
 [jobs.ch](https://www.jobs.ch) and [jobup.ch](https://www.jobup.ch) — Switzerland's
-two biggest boards, every industry, ~50,000 postings. One search, eight boards,
-JSON-first so an LLM agent can drive it.
+two biggest boards, every industry, ~50,000 postings. It also searches
+[MyCareersFuture](https://www.mycareersfuture.gov.sg), Singapore's government
+job portal, scoped to its ~9,000 Information Technology postings. One search,
+nine boards, JSON-first so an LLM agent can drive it.
 
 It also remembers what you've already applied to, across every board, so the same
 job never shows up twice.
@@ -50,7 +52,7 @@ $ sdj list --tech Kubernetes --remote --min-salary 90000 --sort salary
 
 | | |
 |---|---|
-| 🌍 **Eight boards, one tool** | The all-IT devitjobs family across six countries, plus jobs.ch & jobup.ch for every industry in Switzerland — one search, per-board currencies |
+| 🌍 **Nine boards, one tool** | The all-IT devitjobs family across six countries, plus jobs.ch & jobup.ch for every industry in Switzerland and MyCareersFuture for Singapore IT roles — one search, per-board currencies |
 | 💰 **Salary is a first-class filter** | `--min-salary 130000` — no more opening 40 tabs to find the range |
 | 📅 **Real posting dates** | The site re-stamps `activeFrom` when it bumps a listing. This decodes the true creation time from the MongoDB ObjectId, so a "new" job that's actually four months old can't fool you |
 | 🧠 **Remembers where you applied** | Local SQLite. Applied jobs vanish from `list` automatically |
@@ -118,10 +120,11 @@ Installs two equivalent binaries: **`sdj`** and **`swissdevjobs`**. Python 3.9+.
 
 ## Boards
 
-Two platforms, eight boards, one tool. The devitjobs family shares one
-backend across six countries — identical API, identical apply flow — and the
+Three platforms, nine boards, one tool. The devitjobs family shares one
+backend across six countries — identical API, identical apply flow — the
 JobCloud platform (jobs.ch, jobup.ch) covers **every** industry in
-Switzerland:
+Switzerland, and MyCareersFuture is Singapore's government job portal, scoped
+to IT and publishing salary:
 
 | | Board | Country | Scope | Currency | Salary data | Direct apply |
 |---|---|---|---|---|---|---|
@@ -133,6 +136,7 @@ Switzerland:
 | 🇫🇷 | [devitjobs.fr](https://devitjobs.fr) | France | IT | EUR | always | ✅ |
 | 🇨🇭 | [jobs.ch](https://www.jobs.ch) | Switzerland | **all industries** | CHF | none | 🌐 via ATS |
 | 🇨🇭 | [jobup.ch](https://www.jobup.ch) | Switzerland (Romandie) | **all industries** | CHF | none | 🌐 via ATS |
+| 🇸🇬 | [MyCareersFuture](https://www.mycareersfuture.gov.sg) | Singapore | IT | SGD | always | 🌐 via ATS/email |
 
 All boards are searched by default. A selector is a board id (just that one)
 or a country code (every board there) — `--board`, with `--source` and
@@ -151,7 +155,7 @@ no need to memorize which board does what:
 
 ```console
 $ sdj boards
-8 boards — select with --board <id|country>, persist with `sdj config --boards`
+9 boards — select with --board <id|country>, persist with `sdj config --boards`
 ----------------------------------------------------------------------------------------------------
 swissdevjobs     ch   SwissDevJobs        CHF  enabled  it · salary · unfilterable: workload
 germantechjobs   de   GermanTechJobs      EUR  enabled  it · salary · unfilterable: workload
@@ -161,6 +165,7 @@ devitjobs-nl     nl   DevITjobs NL        EUR  enabled  it · salary · unfilter
 devitjobs-fr     fr   DevITjobs FR        EUR  enabled  it · salary · unfilterable: workload
 jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
 jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
+mycareersfuture  sg   MyCareersFuture     SGD  enabled  it · salary · search-driven · no-native-apply · unfilterable: visa, level, workload
 ```
 
 **jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
@@ -181,6 +186,22 @@ $ sdj list "python" --board ch --category it              # CH tech across all t
 They publish no salary data (rendered honestly as `—`) and have **no native
 apply** — every posting routes to the company's own ATS, so `direct-apply`
 refuses with the real apply URL instead of pretending.
+
+**MyCareersFuture is search-driven too.** Singapore's government job portal
+(Workforce Singapore) carries ~9,000 active Information Technology postings
+and its API caps `limit` at 100 rows per page, so queries pass server-side,
+newest first. Unlike jobs.ch it *does* publish salary — monthly SGD on the
+wire, annualized by the adapter — and skills, so `--tech` and `--remote`
+filter normally there. `--visa`, `--level`, and `--workload` are unavailable
+by design: no sponsorship-eligibility field exists on the wire (Singapore's
+employer applies for a specific work pass after the fact, so there is no
+"will they sponsor" flag to read); the board's own position levels
+("Professional", "Middle Management", "Fresh/entry level", …) have no honest
+mapping onto the tool's Junior/Regular/Senior/Principal/CLevel enum, so they
+stay in `job.raw` rather than being guessed at; and no workload-percentage
+field exists at all. There is **no native apply** either — the application
+instructions live in the posting's HTML description, an email address or an
+external ATS link, so `direct-apply` refuses with the real posting URL.
 
 Native postings on every devitjobs board publish a salary range. Syndicated listings
 (marked `isPartner` by the boards — the majority outside Switzerland) sometimes
@@ -645,9 +666,10 @@ flowchart TB
         TRACK["tracking"]
     end
     subgraph AD["adapters"]
-        REG["boards/registry<br/>8 boards by source"]
+        REG["boards/registry<br/>9 boards by source"]
         DEVIT["boards/worldwide/devitjobs<br/>client + ACL"]
         JC["boards/switzerland/jobcloud<br/>client + ACL"]
+        MCF["boards/singapore/mycareersfuture<br/>client + ACL"]
         HTTP["http/client<br/>urllib, cookies, CF detection"]
         PERS["persistence<br/>mappers, repos, SQLite UoW"]
     end
@@ -665,19 +687,22 @@ flowchart TB
     TRACK --> PORTS
     DEVIT -.implements.-> PORTS
     JC -.implements.-> PORTS
+    MCF -.implements.-> PORTS
     PERS -.implements.-> PORTS
     DEVIT --> HTTP
     JC --> HTTP
+    MCF --> HTTP
     DEVIT --> MODEL
     JC --> MODEL
+    MCF --> MODEL
     PERS --> SQL[("~/.cache/…/swissdevjobs.db")]
-    HTTP --> NET(["8 boards, 7 countries"])
+    HTTP --> NET(["9 boards, 8 countries"])
 
     classDef mod fill:#dbe7ff,stroke:#2a5db0,color:#12233f
     classDef ext fill:#ffe9b8,stroke:#b07d1a,color:#4a3308
     classDef store fill:#c7f0d8,stroke:#1a7f45,color:#0b3d22
 
-    class CLI,MCP,SEARCH,APPLY,TRACK,REG,DEVIT,JC,HTTP,PERS,MODEL,PORTS mod
+    class CLI,MCP,SEARCH,APPLY,TRACK,REG,DEVIT,JC,MCF,HTTP,PERS,MODEL,PORTS mod
     class NET ext
     class SQL store
 ```
@@ -839,6 +864,7 @@ src/swissdevjobs_cli/
       registry.py    Every board, keyed by source; selectors resolve country or board id
       worldwide/devitjobs/   Client + anti-corruption layer for the 6-board family
       switzerland/jobcloud/  Client + ACL for jobs.ch + jobup.ch (search-driven)
+      singapore/mycareersfuture/  Client + ACL for MyCareersFuture (search-driven)
     persistence/     Schema, imperative mappers, repositories, SQLite UnitOfWork
     envfile.py       Stdlib .env loading with shell-wins precedence
   service_layer/     Use cases: search, apply, tracking, config

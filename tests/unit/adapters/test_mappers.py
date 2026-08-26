@@ -78,3 +78,50 @@ def test_a_jobcloud_row_always_round_trips_via_light_json(fresh_uow):
     assert cached.posted_at_unix == 1785511679, "hex-decoded UUID garbage"
     assert cached.raw == jsonlib.loads(jsonlib.dumps(job.raw))
     assert cached.board is BOARDS["jobsch"]
+
+
+def test_a_mycareersfuture_row_always_round_trips_via_light_json(fresh_uow):
+    """light_json is mandatory for mycareersfuture rows too, and more sharply.
+
+    Its `_id` is a 32-char hex string that is NOT a MongoDB ObjectId but
+    would decode as one: the column-fallback path would read 0x03c97721
+    and date a 2026 posting to 1972.
+    """
+    import json as jsonlib
+
+    from swissdevjobs_cli.adapters.boards.registry import BOARDS
+    from swissdevjobs_cli.adapters.boards.singapore.mycareersfuture import acl
+
+    board = BOARDS["mycareersfuture"]
+    job = acl.job_from_wire(
+        {
+            "uuid": "03c9772125f5d5737a8576c031b3f911",
+            "title": "Senior Network Engineer",
+            "postedCompany": {"name": "NXERA SG PTE. LTD."},
+            "salary": {
+                "minimum": 8500,
+                "maximum": 10500,
+                "type": {"id": 4, "salaryType": "Monthly"},
+            },
+            "skills": [{"skill": "Python"}],
+            "address": {
+                "districts": [{"location": "D14 Geylang, Eunos", "region": "Central"}]
+            },
+            "metadata": {
+                "newPostingDate": "2026-08-26",
+                "originalPostingDate": "2026-08-20",
+                "jobDetailsUrl": "https://www.mycareersfuture.gov.sg/job/role-03c97721",
+            },
+        },
+        board,
+    )
+    fresh_uow.jobs.store_jobs([job])
+    (cached,) = fresh_uow.jobs.cached_jobs("mycareersfuture", 600)
+    assert cached.posted_at_unix == 1787184000, "hex-decoded uuid garbage"
+    assert cached.raw == jsonlib.loads(jsonlib.dumps(job.raw))
+    assert cached.board is board
+    # The annualized range must survive the trip, not just the raw blob.
+    assert cached.salary.lower == 102000
+    assert cached.salary.upper == 126000
+    assert cached.salary.currency == "SGD"
+    assert cached.raw["technologies"] == ["Python"]

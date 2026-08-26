@@ -11,7 +11,7 @@ from swissdevjobs_cli.adapters.boards.registry import (
 )
 
 
-def test_registry_covers_the_eight_boards():
+def test_registry_covers_the_nine_boards():
     assert set(BOARDS) == {
         "swissdevjobs",
         "germantechjobs",
@@ -21,6 +21,7 @@ def test_registry_covers_the_eight_boards():
         "devitjobs-fr",
         "jobsch",
         "jobup",
+        "mycareersfuture",
     }
     assert FALLBACK_SOURCE in BOARDS
 
@@ -28,11 +29,11 @@ def test_registry_covers_the_eight_boards():
 def test_every_board_is_fully_configured():
     for source, board in BOARDS.items():
         assert board.source == source
-        assert board.platform in {"devitjobs", "jobcloud"}
+        assert board.platform in {"devitjobs", "jobcloud", "mycareersfuture"}
         assert board.base_url.startswith("https://")
         assert not board.base_url.endswith("/")
         assert board.name
-        assert board.currency in {"CHF", "EUR", "GBP", "USD"}
+        assert board.currency in {"CHF", "EUR", "GBP", "USD", "SGD"}
         assert len(board.country) == 2
 
 
