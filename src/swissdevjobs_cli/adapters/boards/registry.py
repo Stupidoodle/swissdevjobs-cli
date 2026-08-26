@@ -8,6 +8,11 @@ breaks. The devitjobs six share one backend (verified live: identical
 US and Canada — devitjobs.us 301-redirects to devitjobs.com, which lists
 both. jobs.ch and jobup.ch share the JobCloud backend: all-industries,
 query-driven, no native apply.
+
+MyCareersFuture (Singapore, government portal) is search-driven like
+JobCloud — its IT category alone carries ~9,000 active jobs, too large and
+rate-limit-uncertain to mirror — but unlike JobCloud it publishes real
+salary and skills data per row.
 """
 
 from __future__ import annotations
@@ -94,6 +99,19 @@ BOARDS: dict[str, Board] = {
         scope="all-industries",
         salary_published=False,
         filters_unavailable=("salary", "remote", "visa", "level", "tech"),
+    ),
+    "mycareersfuture": Board(
+        platform="mycareersfuture",
+        country="sg",
+        base_url="https://www.mycareersfuture.gov.sg",
+        name="MyCareersFuture",
+        currency="SGD",
+        source="mycareersfuture",
+        search_driven=True,
+        native_apply=False,
+        scope="it",
+        salary_published=True,
+        filters_unavailable=("visa", "level", "workload"),
     ),
 }
 

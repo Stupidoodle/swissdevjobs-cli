@@ -1,0 +1,1 @@
+"""Singapore board platforms."""
