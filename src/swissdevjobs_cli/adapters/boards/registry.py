@@ -138,7 +138,13 @@ def categories_for(source: str) -> list[str]:
 
 
 def contracts_for(source: str) -> list[str]:
-    """The contract-type aliases one board's platform can serve."""
+    """The contract-type aliases one board's platform can serve.
+
+    One explicit branch per platform, each reading its own ACL's mapping —
+    a platform with no branch advertises nothing, so a future platform
+    fails the registry test until it declares its aliases here rather than
+    silently inheriting another platform's.
+    """
     board = BOARDS.get(source)
     if board is None:
         return []
@@ -148,11 +154,21 @@ def contracts_for(source: str) -> list[str]:
         )
 
         return sorted(CONTRACT_TYPE_IDS)
-    from swissdevjobs_cli.adapters.boards.worldwide.devitjobs.acl import (
-        JOBTYPE_CONTRACTS,
-    )
+    if board.platform == "mycareersfuture":
+        from swissdevjobs_cli.adapters.boards.singapore.mycareersfuture.acl import (
+            EMPLOYMENT_TYPE_CONTRACTS,
+        )
 
-    return sorted({a for aliases in JOBTYPE_CONTRACTS.values() for a in aliases})
+        return sorted(
+            {a for aliases in EMPLOYMENT_TYPE_CONTRACTS.values() for a in aliases}
+        )
+    if board.platform == "devitjobs":
+        from swissdevjobs_cli.adapters.boards.worldwide.devitjobs.acl import (
+            JOBTYPE_CONTRACTS,
+        )
+
+        return sorted({a for aliases in JOBTYPE_CONTRACTS.values() for a in aliases})
+    return []
 
 
 def known_contracts() -> list[str]:

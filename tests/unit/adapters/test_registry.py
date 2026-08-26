@@ -6,6 +6,7 @@ from swissdevjobs_cli.adapters.boards.registry import (
     BOARDS,
     FALLBACK_SOURCE,
     SOURCE_TO_BOARD,
+    contracts_for,
     known_selectors,
     resolve_selectors,
 )
@@ -85,3 +86,20 @@ def test_known_selectors_cover_countries_and_sources():
     assert "ch" in known
     assert "jobsch" in known
     assert "swissdevjobs" in known
+
+
+def test_every_platform_declares_its_own_contract_aliases():
+    """A platform with no contracts_for branch advertises nothing.
+
+    Guards against a new platform silently inheriting another platform's
+    alias set: advertising an alias the platform's ACL never maps makes
+    `--contract <alias>` return zero rows silently on that board.
+    """
+    for source in BOARDS:
+        assert contracts_for(source), f"{source}: add a contracts_for branch"
+    assert contracts_for("mycareersfuture") == [
+        "freelance",
+        "internship",
+        "permanent",
+        "temporary",
+    ]
