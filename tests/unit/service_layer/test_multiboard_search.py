@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from conftest import job
 from fakes.fake_board_port import FakeBoard
 from swissdevjobs_cli.adapters.boards.registry import BOARDS
@@ -35,6 +37,40 @@ def test_boards_cache_independently(fresh_uow):
     ch.raises = de.raises = RuntimeError("no network expected")
     jobs = search.list_jobs(fresh_uow, [ch, de])
     assert len(jobs) == 2
+
+
+def test_one_dead_board_does_not_abort_the_others(fresh_uow):
+    """A board can vanish mid-release; the other eight still have to answer.
+
+    jobs.ch retired its search endpoint while v0.9.1 was live and every
+    keyword search across all nine boards died with it.
+    """
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
+    de = FakeBoard(
+        feed=[job(_id="68b0000057370f0152e4950e", jobUrl="de-role")],
+        board=BOARDS["germantechjobs"],
+    )
+    de.raises = RuntimeError("HTTP 410 for https://www.jobs.ch/api/v1/public/search")
+    failures: dict[str, str] = {}
+    jobs = search.list_jobs(fresh_uow, [ch, de], failures=failures)
+    assert [j.board.source for j in jobs] == ["swissdevjobs"]
+    assert "410" in failures["germantechjobs"]
+
+
+def test_a_partial_result_says_so_in_band(fresh_uow):
+    """Silence would read as "searched, nothing matched" — the one lie to avoid."""
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
+    note = search.coverage_note(
+        [ch], {}, query="python", category=None, tech=None, failures={"jobsch": "410"}
+    )
+    assert note and "partial" in note and "jobsch" in note
+
+
+def test_every_board_failing_is_an_error_not_an_empty_feed(fresh_uow):
+    ch = FakeBoard(feed=[job()], board=BOARDS["swissdevjobs"])
+    ch.raises = OSError("connection reset")
+    with pytest.raises(RuntimeError, match="every board failed"):
+        search.list_jobs(fresh_uow, [ch])
 
 
 def test_the_same_slug_on_two_boards_does_not_collide(fresh_uow):

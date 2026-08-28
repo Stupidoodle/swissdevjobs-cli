@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
@@ -26,6 +27,7 @@ def list_jobs(
     workload: int | None = None,
     max_age_seconds: int = 600,
     force: bool = False,
+    failures: dict[str, str] | None = None,
 ) -> list[Job]:
     """The browse corpus of every requested board.
 
@@ -33,22 +35,49 @@ def list_jobs(
     boards always ask the server — their cache is an accumulation of past
     query slices, so it is never a truthful browse corpus — and their fresh
     rows are stored so show/apply can resolve them later.
+
+    A board that cannot be reached is skipped rather than aborting the
+    others; pass ``failures`` to receive {source: reason} for the ones that
+    dropped out, so the caller can say so in-band. If every board fails the
+    error is raised — an empty result would be a lie.
     """
     combined: list[Job] = []
+    failed: dict[str, str] = {}
+    served = 0
     for board in boards:
         jobs = None
         if not board.board.search_driven and not force:
             jobs = uow.jobs.cached_jobs(board.board.source, max_age_seconds)
         if jobs is None:
-            jobs = board.fetch_jobs(
-                query=server_query(board.board, query, tech),
-                category=category,
-                contract=contract,
-                workload=workload,
-                force=force,
-            )
+            try:
+                jobs = board.fetch_jobs(
+                    query=server_query(board.board, query, tech),
+                    category=category,
+                    contract=contract,
+                    workload=workload,
+                    force=force,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                # One board being down is not the search being down. Boards
+                # change without warning — jobs.ch retired its search
+                # endpoint mid-release — and before this guard a single
+                # board's transport error aborted the search across all
+                # nine. The failure is named, never swallowed into a quiet
+                # empty result that would read as "searched, nothing
+                # matched": it lands in ``failures`` for the caller's note
+                # and on stderr, since stdout belongs to the MCP transport.
+                failed[board.board.source] = str(exc)
+                if failures is not None:
+                    failures[board.board.source] = str(exc)
+                print(f"{board.board.name}: {exc}", file=sys.stderr)
+                continue
             uow.jobs.store_jobs(jobs)
+        served += 1
         combined.extend(jobs)
+    if boards and not served:
+        raise RuntimeError(
+            "every board failed — " + "; ".join(f"{s}: {e}" for s, e in failed.items())
+        )
     return combined
 
 
@@ -75,11 +104,14 @@ def requested_filters(
     max_salary: int | None = None,
     contract: str | None = None,
     workload: int | None = None,
+    language: str | None = None,
 ) -> set:
     """The filter dimensions this call actually asked for."""
     wanted = set()
     if tech:
         wanted.add("tech")
+    if language:
+        wanted.add("language")
     if remote is not None:
         wanted.add("remote")
     if visa is True:
@@ -124,6 +156,7 @@ def coverage_note(
     query: str | None,
     category: str | None,
     tech: list[str] | None,
+    failures: Mapping[str, str] | None = None,
 ) -> str | None:
     """One in-band sentence on coverage gaps; None when coverage is honest.
 
@@ -160,6 +193,12 @@ def coverage_note(
         parts.append(
             f"boards excluded — their platform publishes none of the "
             f"filtered data ({detail}); drop those filters to search them"
+        )
+    if failures:
+        parts.append(
+            "boards unreachable — these results are partial ("
+            + "; ".join(f"{source}: {why}" for source, why in failures.items())
+            + ")"
         )
     return " | ".join(parts) or None
 

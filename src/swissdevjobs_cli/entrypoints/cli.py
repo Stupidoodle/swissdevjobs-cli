@@ -149,6 +149,7 @@ def _summary_list_payload(
     filtered: list,
     counts: dict,
     page_info,
+    failures: dict,
 ) -> dict:
     """The 0.6 --json envelope: compact summary rows plus coverage steering."""
     payload = {
@@ -158,8 +159,15 @@ def _summary_list_payload(
     }
     if excluded:
         payload["boards_excluded"] = excluded
+    if failures:
+        payload["boards_failed"] = failures
     note = search.coverage_note(
-        boards, excluded, query=args.query, category=args.category, tech=args.tech
+        boards,
+        excluded,
+        query=args.query,
+        category=args.category,
+        tech=args.tech,
+        failures=failures,
     )
     if note:
         payload["note"] = note
@@ -200,8 +208,10 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             max_salary=args.max_salary,
             contract=args.contract,
             workload=args.workload,
+            language=args.language,
         ),
     )
+    failures: dict[str, str] = {}
     jobs = with_retry(
         runtime,
         search.list_jobs,
@@ -213,6 +223,7 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
         contract=args.contract,
         workload=args.workload,
         force=args.refresh,
+        failures=failures,
     )
     filtered = [
         j
@@ -263,13 +274,18 @@ def cmd_list(args: argparse.Namespace, runtime: bootstrap.Runtime) -> int:
             payload = _raw_list_payload(filtered, counts, page_info)
         else:
             payload = _summary_list_payload(
-                args, runtime, boards, excluded, filtered, counts, page_info
+                args, runtime, boards, excluded, filtered, counts, page_info, failures
             )
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
     note = search.coverage_note(
-        boards, excluded, query=args.query, category=args.category, tech=args.tech
+        boards,
+        excluded,
+        query=args.query,
+        category=args.category,
+        tech=args.tech,
+        failures=failures,
     )
     if note:
         print(f"note: {note}", file=sys.stderr)

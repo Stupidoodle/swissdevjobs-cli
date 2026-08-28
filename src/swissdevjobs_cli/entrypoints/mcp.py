@@ -125,10 +125,12 @@ def tool_search_jobs(
         max_salary=max_salary,
         contract=contract,
         workload=workload,
+        language=language,
     )
     board_clients, excluded = search.split_by_filterability(
         _boards_for(runtime, board or country), wanted
     )
+    failures: dict[str, str] = {}
     jobs = search.list_jobs(
         uow,
         board_clients,
@@ -137,6 +139,7 @@ def tool_search_jobs(
         tech=tech,
         contract=contract,
         workload=workload,
+        failures=failures,
     )
     hits = [
         j
@@ -177,8 +180,15 @@ def tool_search_jobs(
     }
     if excluded:
         result["boards_excluded"] = excluded
+    if failures:
+        result["boards_failed"] = failures
     note = search.coverage_note(
-        board_clients, excluded, query=query, category=category, tech=tech
+        board_clients,
+        excluded,
+        query=query,
+        category=category,
+        tech=tech,
+        failures=failures,
     )
     if note:
         result["note"] = note
