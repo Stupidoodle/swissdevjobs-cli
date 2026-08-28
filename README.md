@@ -163,13 +163,13 @@ devitjobs-uk     uk   DevITjobs UK        GBP  enabled  it · salary · unfilter
 devitjobs-us     us   DevITjobs US/CA     USD  enabled  it · salary · unfilterable: workload
 devitjobs-nl     nl   DevITjobs NL        EUR  enabled  it · salary · unfilterable: workload
 devitjobs-fr     fr   DevITjobs FR        EUR  enabled  it · salary · unfilterable: workload
-jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
-jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech · categories: it
+jobsch           ch   jobs.ch             CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech, language · categories: it
+jobup            ch   jobup.ch            CHF  enabled  all-industries · no-salary · search-driven · no-native-apply · unfilterable: salary, remote, visa, level, tech, language · categories: it
 mycareersfuture  sg   MyCareersFuture     SGD  enabled  it · salary · search-driven · no-native-apply · unfilterable: visa, level, workload
 ```
 
 **jobs.ch and jobup.ch are search-driven.** Their ~50k-job inventory can't be
-mirrored (the API caps at 20 rows per page and 2,000 results per query), so
+mirrored (the API serves up to 200 rows per page and stops paging at 100 pages), so
 they answer your query server-side, newest first — pass free text for real
 coverage, and `--category it` to stay in tech:
 
@@ -764,8 +764,12 @@ surface — shared by both boards, each with its own category taxonomy:
 
 | endpoint | purpose |
 |---|---|
-| `GET /api/v1/public/search` | query, `rows` (≤20), `page` (≤2,000 results), `sort`, `category-ids[]` |
+| `GET job-search-api.<board>/search` | query, `rows` (≤200), `page` (≤100), `sort`, `categoryIds`, `employmentTypeIds`, `employmentGradeMin`/`Max` |
 | `GET /api/v1/public/search/job/{id}` | full detail incl. apply method and ATS URL |
+
+The two halves live on different hosts: JobCloud retired `/api/v1/public/search`
+on 2026-08-28 (it answers `410 Gone` on both boards) and moved search to the
+host its own frontend calls. The detail endpoint beside it still serves.
 
 Search-driven boards always ask the server; their SQLite rows exist so `show`
 and `apply` can resolve what a past search surfaced.

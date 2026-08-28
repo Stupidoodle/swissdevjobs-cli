@@ -83,6 +83,12 @@ opposite**:
   feature lands in both entrypoints or it didn't land.
 - **stdout belongs to the MCP transport.** Nothing under service_layer or
   adapters may print. Diagnostics go to stderr.
+- **One board failing is never all boards failing.** `search.list_jobs`
+  isolates each board's fetch: a transport error drops that board, names it
+  in `failures` (surfaced as `boards_failed` plus the in-band `note`) and
+  lets the rest answer. Two outages in three days reached every board
+  through this one missing guard. The result must never be a silent empty
+  list — a partial result says it is partial, and a total outage raises.
 - **Never submit an application in tests, smoke checks, or development.**
   `apply_to_job` without `confirm` returns a preview; that is the only apply
   call ever made against the real boards outside production use. The
@@ -143,13 +149,22 @@ anything by country: `Runtime` routes by `job.board.source`.
   refusals below).
 - **jobcloud** (switzerland/jobcloud/): jobs.ch, jobup.ch. All industries,
   `Board.search_driven=True`: the ~45k-job inventory cannot be mirrored
-  (rows hard-capped at 20/page, result window at 2,000), so every browse
-  passes the user's query server-side (`sort=date`) and the cache serves
+  (rows serve up to 200/page, page number caps at 100, deep pages fail past
+  ~10k rows), so every browse passes the user's query server-side
+  (`sort=date`) and the cache serves
   RESOLUTION only (`search.resolve_jobs`) — never treat it as a browse
   corpus. `Board.native_apply=False`: application_method is an external ATS
   redirect or JobCloud's own authenticated form, so apply always refuses
   with `no_native_apply` + the ATS URL. No salary data exists on the wire —
-  keep salary optional for every future board. `category-ids[]` taxonomies
+  keep salary optional for every future board. Search lives on
+  `job-search-api.<board>/search` and speaks camelCase; the board's own
+  domain kept `/api/v1/public/search/job/{id}` for details but answers `410
+  Gone` on the retired `/api/v1/public/search` (v0.9.2). The search host
+  IGNORES unknown params rather than rejecting them, so `category-ids[]=106`
+  still returns 200 with the whole unfiltered corpus — every server-side
+  filter is proved by effect in the live lane, never by a status code.
+  `languageIds` exists on search rows but is empty on all of them, so both
+  boards declare "language" unfilterable. `categoryIds` taxonomies
   are per board (IT root: jobs.ch 106, jobup 702; jobup 422s on jobs.ch
   ids). Server-matched rows must skip the client-side query filter
   (`search.query_for`) or description-only hits get dropped.
