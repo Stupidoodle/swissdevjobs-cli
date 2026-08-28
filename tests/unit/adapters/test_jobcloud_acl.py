@@ -9,8 +9,39 @@ JOBSCH = BOARDS["jobsch"]
 JOBUP = BOARDS["jobup"]
 
 
+def search_doc(**overrides):
+    """A trimmed job-search-api document (recorded live 2026-08-28).
+
+    The search host speaks camelCase and drops `slug`, `language_skills` and
+    `_links`; the detail endpoint beside it still speaks the snake-case
+    shape ``doc()`` records.
+    """
+    base = {
+        "id": "f667bc34-c8c9-47c0-b554-9050fdcdcf5f",
+        "title": "Full-Stack Developer (m/w/d) Python",
+        "company": {
+            "id": "db7ac986-6412-41f9-b0ed-dd21d1533dcf",
+            "name": "SEPPmail Deutschland GmbH",
+            "slug": "db7ac986-seppmail-deutschland-gmbh",
+        },
+        "place": "Zürich",
+        "locations": [{"city": "Zürich", "cantonCode": "ZH", "countryCode": "CH"}],
+        "publicationDate": "2026-07-31T17:27:59+02:00",
+        "initialPublicationDate": "2026-07-31T15:27:59+00:00",
+        "employmentTypeIds": ["5"],
+        "employmentGrades": [100],
+        "employmentPositionIds": [],
+        "languageIds": [],
+        "listingTags": [],
+        "benefitIds": [],
+        "isPaid": True,
+    }
+    base.update(overrides)
+    return base
+
+
 def doc(**overrides):
-    """A trimmed /api/v1/public/search document (recorded 2026-08-25)."""
+    """A trimmed /api/v1/public/search/job/{id} document (recorded 2026-08-25)."""
     base = {
         "job_id": "f667bc34-c8c9-47c0-b554-9050fdcdcf5f",
         "datapool_id": "f667bc34-c8c9-47c0-b554-9050fdcdcf5f",
@@ -143,6 +174,49 @@ def test_the_original_wire_mapping_is_not_mutated():
     acl.job_from_wire(wire, JOBSCH)
     assert "name" not in wire
     assert "source" not in wire
+
+
+def test_a_search_row_folds_into_the_snake_case_contract():
+    """`Job.raw` keeps the keys it always had, whatever the search host calls them."""
+    (j,) = acl.jobs_from_wire([search_doc()], JOBSCH)
+    raw = j.raw
+    assert raw["_id"] == "f667bc34-c8c9-47c0-b554-9050fdcdcf5f"
+    assert raw["name"].startswith("Full-Stack Developer")
+    assert raw["company"] == "SEPPmail Deutschland GmbH"
+    assert raw["actualCity"] == "Zürich"
+    assert raw["activeFrom"] == "2026-07-31T17:27:59+02:00"
+    assert raw["contractTypes"] == ["permanent"]
+    assert raw["workloadFrom"] == raw["workloadTo"] == 100
+    assert j.posted_at_unix == 1785511679
+    # the snake-case keys consumers were promised, rebuilt from camelCase
+    assert raw["company_name"] == "SEPPmail Deutschland GmbH"
+    assert raw["employment_type_ids"] == ["5"]
+    # and the camelCase originals ride along — additive, never a removal
+    assert raw["employmentTypeIds"] == ["5"]
+
+
+def test_a_search_row_rebuilds_the_slug_the_detail_endpoint_uses():
+    """`jobUrl` is what `sdj show` resolves against; it must never go empty."""
+    (j,) = acl.jobs_from_wire([search_doc()], JOBSCH)
+    assert j.raw["jobUrl"] == (
+        "f667bc34-c8c9-47c0-b554-9050fdcdcf5f-full-stack-developer-m-w-d-python"
+    )
+    assert acl.posting_url(JOBSCH, j.raw) == (
+        "https://www.jobs.ch/en/vacancies/detail/f667bc34-c8c9-47c0-b554-9050fdcdcf5f/"
+    )
+
+
+def test_a_search_row_has_no_language_so_the_board_declares_it_unfilterable():
+    """`languageIds` is empty on every row; matching on it would empty the board."""
+    (j,) = acl.jobs_from_wire([search_doc()], JOBSCH)
+    assert j.raw["language"] is None
+    assert "language" in JOBSCH.filters_unavailable
+    assert "language" in JOBUP.filters_unavailable
+
+
+def test_a_search_row_survives_a_missing_company_object():
+    (j,) = acl.jobs_from_wire([search_doc(company=None)], JOBSCH)
+    assert j.company == ""
 
 
 def test_contract_and_workload_are_normalized_onto_the_row():

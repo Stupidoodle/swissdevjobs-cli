@@ -1,15 +1,21 @@
 """Anti-corruption layer: JobCloud wire JSON → domain Job / JobDetail.
 
-jobs.ch and jobup.ch share the JobCloud backend (`/api/v1/public/search`,
-`/api/v1/public/search/job/{id}`), so one translation covers both boards.
-The raw mapping keeps every original wire key and adds the normalized keys
-(`name`, `company`, `actualCity`, …) the rest of the system reads, so the
-filter/sort/output paths never see platform-specific field names.
+jobs.ch and jobup.ch share the JobCloud backend, so one translation covers
+both boards — but as of 2026-08-28 its two halves no longer speak the same
+dialect: search moved to `job-search-api.<board>/search` and renamed every
+field to camelCase, while `/api/v1/public/search/job/{id}` kept the original
+snake-case names. `search_doc_to_wire` folds the former into the latter, so
+everything below this line sees one shape. The raw mapping keeps every
+original wire key and adds the normalized keys (`name`, `company`,
+`actualCity`, …) the rest of the system reads, so the filter/sort/output
+paths never see platform-specific field names.
 
-Platform facts the mapping encodes (recon 2026-08-25, jobcloud_recon.md):
+Platform facts the mapping encodes (recon 2026-08-25, re-verified 2026-08-28):
 - no salary fields exist anywhere on the wire → SalaryRange stays empty;
 - `language_skills` is a list of {language: ISO-639-1, level}; the FIRST
-  entry is treated as the posting's primary language;
+  entry is treated as the posting's primary language. It exists on details
+  only — search rows carry an always-empty `languageIds`, so both boards
+  declare "language" in `filters_unavailable`;
 - `skills` is usually empty even on details — technology filters mostly
   can't match these rows client-side, server-side `query` is the honest way;
 - `application_method` is `application_url` (external ATS) or `form`
@@ -18,6 +24,8 @@ Platform facts the mapping encodes (recon 2026-08-25, jobcloud_recon.md):
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
@@ -126,9 +134,55 @@ def job_from_wire(wire: Mapping[str, Any], board: Board) -> Job:
     )
 
 
+def _slugify(text: str) -> str:
+    ascii_only = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", ascii_only.lower())).strip("-")
+
+
+def search_doc_to_wire(doc: Mapping[str, Any]) -> dict[str, Any]:
+    """A `job-search-api` document → the snake-case shape the ACL reads.
+
+    The search host renamed every field to camelCase when it moved off
+    `/api/v1/public/search` (2026-08-28), but the detail endpoint kept the
+    original names — and `Job.raw` is a frozen contract, so the snake-case
+    keys are what consumers still get. The camelCase originals are kept
+    alongside them: additive keys are allowed, removals are not.
+
+    Two fields have no equivalent on the new search rows. `slug` is gone, so
+    it is rebuilt in the detail endpoint's own `{id}-{title}` shape — it is
+    the handle `sdj show` resolves against and dropping it would empty a
+    contract key. `language_skills` is unrecoverable: `languageIds` exists
+    but is empty on every row (200/200 sampled), which is why the boards
+    declare "language" unfilterable rather than silently matching nothing.
+    """
+    wire = dict(doc)
+    raw_company = doc.get("company")
+    company: Mapping[str, Any] = raw_company if isinstance(raw_company, Mapping) else {}
+    job_id = str(doc.get("id") or "")
+    title = str(doc.get("title") or "")
+    wire["job_id"] = job_id
+    wire["title"] = title
+    wire["slug"] = f"{job_id}-{_slugify(title)}" if job_id else ""
+    wire["company_name"] = company.get("name") or ""
+    wire["company_id"] = company.get("id")
+    wire["company_slug"] = company.get("slug")
+    wire["place"] = doc.get("place")
+    wire["locations"] = doc.get("locations") or []
+    wire["initial_publication_date"] = doc.get("initialPublicationDate")
+    wire["publication_date"] = doc.get("publicationDate")
+    wire["employment_type_ids"] = doc.get("employmentTypeIds") or []
+    wire["employment_grades"] = doc.get("employmentGrades") or []
+    wire["employment_position_ids"] = doc.get("employmentPositionIds") or []
+    wire["benefit_ids"] = doc.get("benefitIds") or []
+    wire["listing_tags"] = doc.get("listingTags") or []
+    wire["is_paid"] = doc.get("isPaid")
+    wire["language_skills"] = []
+    return wire
+
+
 def jobs_from_wire(documents: list[Mapping[str, Any]], board: Board) -> list[Job]:
     """One search response's documents → domain Jobs."""
-    return [job_from_wire(doc, board) for doc in documents]
+    return [job_from_wire(search_doc_to_wire(doc), board) for doc in documents]
 
 
 def detail_from_wire(wire: Mapping[str, Any], board: Board) -> JobDetail:

@@ -6,7 +6,7 @@ import json
 import urllib.parse
 
 import pytest
-from test_jobcloud_acl import detail_doc, doc
+from test_jobcloud_acl import detail_doc, search_doc
 
 from swissdevjobs_cli.adapters.boards.registry import BOARDS
 from swissdevjobs_cli.adapters.boards.switzerland.jobcloud.client import JobCloudClient
@@ -22,13 +22,13 @@ class FakeHttp:
 
     def get(self, path, **kwargs):
         self.gets.append(path)
-        if path.startswith("/api/v1/public/search/job/"):
+        if "/api/v1/public/search/job/" in path:
             return json.dumps(self.detail).encode()
         query = urllib.parse.parse_qs(path.split("?", 1)[1])
         page = int(query["page"][0])
         payload = {
-            "num_pages": len(self.pages),
-            "current_page": page,
+            "numPages": len(self.pages),
+            "currentPage": page,
             "documents": self.pages.get(page, []),
         }
         return json.dumps(payload).encode()
@@ -37,8 +37,8 @@ class FakeHttp:
 def test_fetch_jobs_paginates_until_the_server_page_count():
     http = FakeHttp(
         pages={
-            1: [doc(job_id="a" * 36)],
-            2: [doc(job_id="b" * 36)],
+            1: [search_doc(id="a" * 36)],
+            2: [search_doc(id="b" * 36)],
         }
     )
     jobs = JobCloudClient(BOARDS["jobsch"], http).fetch_jobs()
@@ -48,7 +48,7 @@ def test_fetch_jobs_paginates_until_the_server_page_count():
 
 def test_the_page_budget_caps_a_deep_result_set(monkeypatch):
     monkeypatch.setenv("SDJ_JOBCLOUD_PAGES", "1")
-    http = FakeHttp(pages={n: [doc(job_id=str(n) * 36)] for n in range(1, 9)})
+    http = FakeHttp(pages={n: [search_doc(id=str(n) * 36)] for n in range(1, 9)})
     jobs = JobCloudClient(BOARDS["jobsch"], http).fetch_jobs()
     assert len(jobs) == 1
     assert len(http.gets) == 1
@@ -57,18 +57,20 @@ def test_the_page_budget_caps_a_deep_result_set(monkeypatch):
 def test_a_query_is_passed_through_to_the_server():
     http = FakeHttp(pages={1: []})
     JobCloudClient(BOARDS["jobsch"], http).fetch_jobs(query="python zürich")
+    assert http.gets[0].startswith("https://job-search-api.jobs.ch/search?")
     assert "query=python+z%C3%BCrich" in http.gets[0]
     assert "sort=date" in http.gets[0]
-    assert "rows=20" in http.gets[0]
+    assert "rows=100" in http.gets[0]
 
 
 def test_the_it_category_resolves_per_board_taxonomy():
     http = FakeHttp(pages={1: []})
     JobCloudClient(BOARDS["jobsch"], http).fetch_jobs(category="it")
-    assert "category-ids%5B%5D=106" in http.gets[0]
+    assert "categoryIds=106" in http.gets[0]
     http2 = FakeHttp(pages={1: []})
     JobCloudClient(BOARDS["jobup"], http2).fetch_jobs(category="it")
-    assert "category-ids%5B%5D=702" in http2.gets[0]
+    assert "categoryIds=702" in http2.gets[0]
+    assert http2.gets[0].startswith("https://job-search-api.jobup.ch/search?")
 
 
 def test_an_unknown_category_is_a_loud_error():
@@ -80,6 +82,7 @@ def test_fetch_detail_hits_the_public_job_endpoint():
     http = FakeHttp(detail=detail_doc())
     detail = JobCloudClient(BOARDS["jobsch"], http).fetch_detail("f667bc34")
     assert http.gets[0] == "/api/v1/public/search/job/f667bc34"
+    # Details still live on the board's own domain — only search moved hosts.
     assert detail.redirect_url.startswith("https://stats.the-network.com/")
 
 
@@ -106,6 +109,9 @@ def test_contract_and_workload_filter_server_side():
     """
     http = FakeHttp(pages={1: []})
     JobCloudClient(BOARDS["jobsch"], http).fetch_jobs(contract="freelance", workload=80)
-    assert "employment-type-ids%5B%5D=2" in http.gets[0]
-    assert "employment-grade-min=80" in http.gets[0]
-    assert "employment-grade-max=80" in http.gets[0]
+    assert "employmentTypeIds=2" in http.gets[0]
+    assert "employmentGradeMin=80" in http.gets[0]
+    assert "employmentGradeMax=80" in http.gets[0]
+    # The retired endpoint IGNORED unknown params instead of rejecting them,
+    # so a leftover snake-case name would quietly return the whole corpus.
+    assert "employment-type-ids" not in http.gets[0]

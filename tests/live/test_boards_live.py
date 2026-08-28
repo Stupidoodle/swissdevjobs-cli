@@ -54,6 +54,47 @@ def test_a_jobcloud_query_actually_narrows():
     assert all(j.board is board for j in jobs)
 
 
+@pytest.mark.parametrize("source", ["jobsch", "jobup"])
+def test_a_jobcloud_server_filter_is_proved_by_effect_not_by_a_200(source, monkeypatch):
+    """Every JobCloud filter param must visibly change the result.
+
+    The search host ignores unknown params instead of rejecting them — the
+    retired `category-ids[]=106` spelling still answers 200 with the whole
+    unfiltered corpus. So a live 200 proves nothing here; only the rows do.
+    """
+    monkeypatch.setenv("SDJ_JOBCLOUD_PAGES", "1")
+    client = _client(BOARDS[source])
+
+    baseline = {str(j.id) for j in client.fetch_jobs()}
+    assert baseline, f"{source} returned nothing at all"
+
+    it_only = client.fetch_jobs(category="it")
+    assert it_only, f"{source} category=it returned nothing"
+    assert {str(j.id) for j in it_only} != baseline, "categoryIds did not filter"
+
+    freelance = client.fetch_jobs(contract="freelance")
+    assert freelance, f"{source} contract=freelance returned nothing"
+    assert all("freelance" in j.raw["contractTypes"] for j in freelance), (
+        "employmentTypeIds did not filter"
+    )
+
+    part_time = client.fetch_jobs(workload=60)
+    assert part_time, f"{source} workload=60 returned nothing"
+    assert all(j.raw["workloadFrom"] <= 60 <= j.raw["workloadTo"] for j in part_time), (
+        "employmentGradeMin/Max did not filter"
+    )
+
+
+def test_a_jobcloud_detail_still_lives_on_the_board_domain():
+    """Search moved hosts on 2026-08-28; the detail endpoint did not."""
+    board = BOARDS["jobsch"]
+    client = _client(board)
+    job = client.fetch_jobs(query="engineer")[0]
+    detail = client.fetch_detail(str(job.id))
+    assert detail.title
+    assert detail.raw["description"]
+
+
 @pytest.mark.parametrize(
     "query", ["python", "kubernetes sre", "golang backend", "rust systems"]
 )
