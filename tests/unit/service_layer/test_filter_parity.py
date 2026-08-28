@@ -22,9 +22,10 @@ GATED = {
     "salary": {"min_salary": 1},
     "contract": {"contract": "permanent"},
     "workload": {"workload": 80},
+    "language": {"language": "German"},
 }
 # Params that must work on every platform's normalized row, no gate allowed.
-UNIVERSAL = {"location", "language", "company", "query", "tech_any"}
+UNIVERSAL = {"location", "company", "query", "tech_any"}
 
 
 class _Port:
@@ -47,6 +48,7 @@ def test_every_matches_param_is_classified_gated_or_universal():
         "max_salary",
         "contract",
         "workload",
+        "language",
     }
     assert params == gated_params | UNIVERSAL
 

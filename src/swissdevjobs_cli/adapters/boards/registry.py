@@ -85,7 +85,7 @@ BOARDS: dict[str, Board] = {
         native_apply=False,
         scope="all-industries",
         salary_published=False,
-        filters_unavailable=("salary", "remote", "visa", "level", "tech"),
+        filters_unavailable=("salary", "remote", "visa", "level", "tech", "language"),
     ),
     "jobup": Board(
         platform="jobcloud",
@@ -98,7 +98,7 @@ BOARDS: dict[str, Board] = {
         native_apply=False,
         scope="all-industries",
         salary_published=False,
-        filters_unavailable=("salary", "remote", "visa", "level", "tech"),
+        filters_unavailable=("salary", "remote", "visa", "level", "tech", "language"),
     ),
     "mycareersfuture": Board(
         platform="mycareersfuture",
